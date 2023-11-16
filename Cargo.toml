@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+  "packages/*"
+]
+
+[workspace.package]
+authors = ["Diego Sesmas Estrada <diegos7167@gmail.com>"]
+repository = "https://github.com/TheCodeSquid/stardom"
+license = "MIT"
