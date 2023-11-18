@@ -1,6 +1,6 @@
 use crate::{
     item::{Item, ItemKey},
-    runtime::Runtime,
+    Runnable, Runtime,
 };
 
 #[derive(Clone, Copy)]
@@ -17,8 +17,14 @@ impl Effect {
         });
         Self { rt, item }
     }
+}
 
-    pub fn run(&self) {
+impl Runnable for Effect {
+    fn run(&self) {
         self.item.run(self.rt)
+    }
+
+    fn item_key(&self) -> ItemKey {
+        self.item
     }
 }

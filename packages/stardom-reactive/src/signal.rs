@@ -1,9 +1,8 @@
 use std::marker::PhantomData;
 
 use crate::{
-    io::{Track, Trigger},
     item::{Item, ItemKey},
-    runtime::Runtime,
+    HasRuntime, Runnable, Runtime, Track, Trigger,
 };
 
 pub struct Signal<T: 'static> {
@@ -36,13 +35,15 @@ impl<T: 'static> Clone for Signal<T> {
 
 impl<T: 'static> Copy for Signal<T> {}
 
-impl<T: 'static> Track<T> for Signal<T> {
+impl<T: 'static> HasRuntime for Signal<T> {
     fn runtime(&self) -> &'static Runtime {
         self.rt
     }
+}
 
-    fn track(&self) {
-        self.item.track(self.rt);
+impl<T: 'static> Track<T> for Signal<T> {
+    fn track<R: Runnable>(&self, runnable: &R) {
+        self.item.track(self.rt, runnable.item_key());
     }
 
     fn with<U, F>(&self, f: F) -> U
@@ -50,7 +51,7 @@ impl<T: 'static> Track<T> for Signal<T> {
         F: FnOnce(&T) -> U,
     {
         let value = f(&*self.item.value(self.rt));
-        self.track();
+        self.track_active();
         value
     }
 }

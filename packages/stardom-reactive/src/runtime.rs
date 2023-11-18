@@ -6,10 +6,8 @@ use std::{
 use slotmap::{SlotMap, SparseSecondaryMap};
 
 use crate::{
-    effect::Effect,
     item::{Item, ItemKey},
-    memo::Memo,
-    signal::Signal,
+    Effect, Memo, Runnable, Signal,
 };
 
 thread_local! {

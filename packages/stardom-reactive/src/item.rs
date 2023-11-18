@@ -6,7 +6,7 @@ use std::{
 
 use slotmap::new_key_type;
 
-use crate::runtime::Runtime;
+use crate::Runtime;
 
 new_key_type! {
     pub struct ItemKey;
@@ -57,16 +57,10 @@ impl ItemKey {
         })
     }
 
-    pub fn track(self, rt: &'static Runtime) {
-        if !rt.tracking.get() {
-            return;
-        }
-
-        if let Some(active) = rt.active.borrow().last() {
-            let mut item = self.get_mut(rt);
-            if !item.dependents.contains(active) {
-                item.dependents.push(*active);
-            }
+    pub fn track(self, rt: &'static Runtime, dependent: Self) {
+        let mut item = self.get_mut(rt);
+        if !item.dependents.contains(&dependent) {
+            item.dependents.push(dependent);
         }
     }
 

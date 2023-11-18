@@ -1,0 +1,30 @@
+[package]
+name = "stardom-web"
+version = "0.1.0"
+edition = "2021"
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+stardom-nodes = { version = "0.1", path = "../stardom-nodes" }
+
+bitflags = "2"
+
+wasm-bindgen = { version = "0.2", features = ["enable-interning"] }
+js-sys = "0.3"
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+  "Window",
+  "Document",
+  "Node",
+  "Element",
+  "Text",
+  "Comment",
+  "Range",
+  "DocumentFragment",
+  "NodeList",
+  "Event"
+]
