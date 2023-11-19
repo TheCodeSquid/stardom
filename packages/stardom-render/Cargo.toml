@@ -1,0 +1,12 @@
+[package]
+name = "stardom-render"
+version = "0.1.0"
+edition = "2021"
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+stardom-nodes = { version = "0.1", path = "../stardom-nodes" }
+
+indexmap = "2"

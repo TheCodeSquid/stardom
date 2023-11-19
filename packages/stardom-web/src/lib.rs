@@ -177,6 +177,8 @@ impl Node for DomNode {
         };
         children.insert(idx, child.clone());
 
+        child.0.parent.borrow_mut().replace(Rc::downgrade(&self.0));
+
         if let Some(target) = self.native_target() {
             child.mount_to_native(&target, before.map(|node| node.first_node()).as_ref());
         }
@@ -184,12 +186,38 @@ impl Node for DomNode {
 
     fn remove(&self, child: &Self) {
         let mut children = self.0.children.borrow_mut();
-        if let Some(idx) = children.iter().position(|node| node == child) {
-            children.remove(idx);
-        }
+        let idx = children
+            .iter()
+            .position(|node| node == child)
+            .expect("not a parent of child node");
+        children.remove(idx);
+
+        child.0.parent.borrow_mut().take();
 
         if let Some(target) = self.native_target() {
             child.remove_from_native(&target);
+        }
+    }
+
+    fn set_text(&self, content: &str) {
+        if self.is(Flags::TEXT) {
+            self.0.native.set_text_content(Some(content));
+        } else if self.is(Flags::RAW) {
+            for child in self.0.children.borrow().clone() {
+                self.remove(&child);
+            }
+
+            let range = web_sys::Range::new().unwrap();
+            let doc = range.create_contextual_fragment(content).unwrap();
+            let native_nodes = doc.child_nodes();
+
+            for i in 0..native_nodes.length() {
+                let native = native_nodes.get(i).unwrap();
+                let holder = Self::new(native, Flags::empty());
+                self.insert(&holder, None);
+            }
+        } else {
+            panic!("can only set text content of text or raw nodes");
         }
     }
 
@@ -214,26 +242,6 @@ impl Node for DomNode {
                 .unwrap();
         } else {
             panic!("attributes only exist on element nodes");
-        }
-    }
-
-    fn set_text(&self, content: &str) {
-        if self.is(Flags::TEXT) {
-            self.0.native.set_text_content(Some(content));
-        } else if self.is(Flags::RAW) {
-            // TODO: clear children here
-
-            let range = web_sys::Range::new().unwrap();
-            let doc = range.create_contextual_fragment(content).unwrap();
-            let native_nodes = doc.child_nodes();
-
-            for i in 0..native_nodes.length() {
-                let native = native_nodes.get(i).unwrap();
-                let holder = Self::new(native, Flags::empty());
-                self.insert(&holder, None);
-            }
-        } else {
-            panic!("can only set text content of text or raw nodes");
         }
     }
 
