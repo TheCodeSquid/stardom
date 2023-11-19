@@ -31,4 +31,18 @@ macro_rules! element {
     }};
 }
 
+#[macro_export]
+macro_rules! fragment {
+    ($($body:tt)*) => {{
+        let fragment = $crate::Node::fragment();
+
+        let parent = stardom_macros::node_body!(&fragment, $($body)*);
+        if let Some(parent) = parent {
+            $crate::Node::insert(parent, &fragment, None);
+        }
+
+        fragment
+    }};
+}
+
 create_tagged_macros!(stardom_nodes::element);
