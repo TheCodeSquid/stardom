@@ -1,7 +1,7 @@
 use syn::{
     braced,
     parse::{Parse, ParseStream},
-    token, Error, Result, Token,
+    token, Result, Token,
 };
 
 pub struct NodeBodyMacro {
@@ -47,7 +47,7 @@ impl Parse for NodeBody {
             } else if input.is_empty() {
                 break;
             } else {
-                return Err(syn::Error::new(input.span(), "expected `;`"));
+                return Err(input.error("expected `;`"));
             }
         }
 
@@ -58,7 +58,7 @@ impl Parse for NodeBody {
 pub enum NodeStmt {
     Macro(syn::ExprMacro),
     Child(syn::Expr),
-    Fragment(Vec<NodeStmt>),
+    Fragment(token::Brace, Vec<NodeStmt>),
     Text(syn::Expr),
     Attr { name: syn::Expr, value: syn::Expr },
     Event { name: syn::Expr, f: syn::Expr },
@@ -68,28 +68,28 @@ impl Parse for NodeStmt {
     fn parse(input: ParseStream) -> Result<Self> {
         let stmt = if input.peek(token::Brace) {
             let body;
-            braced!(body in input);
+            let brace = braced!(body in input);
 
             let mut stmts = vec![];
             while !body.is_empty() {
-                if input.peek(Token![;]) {
-                    input.parse::<Token![;]>()?;
+                if body.peek(Token![;]) {
+                    body.parse::<Token![;]>()?;
                     continue;
                 }
 
-                stmts.push(input.parse()?);
+                stmts.push(body.parse()?);
 
-                if input.peek(Token![;]) {
-                    input.parse::<Token![;]>()?;
+                if body.peek(Token![;]) {
+                    body.parse::<Token![;]>()?;
                     continue;
-                } else if input.is_empty() {
+                } else if body.is_empty() {
                     break;
                 } else {
-                    return Err(syn::Error::new(input.span(), "expected `;`"));
+                    return Err(body.error("expected `;`"));
                 }
             }
 
-            NodeStmt::Fragment(stmts)
+            NodeStmt::Fragment(brace, stmts)
         } else if input.peek(Token![+]) {
             input.parse::<Token![+]>()?;
             let expr = input.parse()?;
@@ -110,9 +110,9 @@ impl Parse for NodeStmt {
 
             NodeStmt::Event { name, f }
         } else {
-            let expr: syn::Expr = input.parse().map_err(|_| {
-                Error::new(input.span(), "expected `+`, `#`, `@`, or an expression")
-            })?;
+            let expr: syn::Expr = input
+                .parse()
+                .map_err(|_| input.error("expected `{`, `+`, `#`, `@`, or an expression"))?;
 
             if let syn::Expr::Macro(expr) = expr {
                 NodeStmt::Macro(expr)

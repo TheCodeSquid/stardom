@@ -30,11 +30,11 @@ fn create_stmts(target: &syn::Expr, stmts: Vec<NodeStmt>) -> Vec<TokenStream> {
     stmts
         .into_iter()
         .map(|stmt| match stmt {
-            NodeStmt::Fragment(stmts) => {
-                let fragment = syn::parse_quote!(fragment);
-                let stmts = create_stmts(&fragment, stmts);
+            NodeStmt::Fragment(brace, stmts) => {
+                let fragment = syn::Ident::new("fragment", Span::call_site());
+                let stmts = create_stmts(&syn::parse_quote!(&#fragment), stmts);
 
-                quote! {{
+                quote_spanned! {brace.span => {
                     let parent = #target;
                     let #fragment = stardom_nodes::Node::fragment();
 
