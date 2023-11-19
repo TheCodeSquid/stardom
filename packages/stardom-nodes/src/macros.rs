@@ -46,3 +46,32 @@ macro_rules! fragment {
 }
 
 create_tagged_macros!(stardom_nodes::element);
+
+#[macro_export]
+macro_rules! show {
+    ($condition:expr, { $($body:tt)* } ;* $parent:expr) => {{
+        let fragment = stardom_nodes::Node::fragment();
+        let child = stardom_nodes::Node::fragment();
+
+        let _: Option<()> = stardom_macros::node_body!(&child, $($body)*);
+
+        let f = ::std::clone::Clone::clone(&fragment);
+        let last = ::std::cell::Cell::new(false);
+        stardom_reactive::effect(move || {
+            let now = $condition;
+            if now == last.get() {
+                return;
+            } else {
+                last.set(now);
+            }
+
+            if $condition {
+                stardom_nodes::Node::insert(&f, &child, None);
+            } else {
+                stardom_nodes::Node::remove(&f, &child);
+            }
+        });
+
+        stardom_nodes::Node::insert($parent, &fragment, None);
+    }};
+}

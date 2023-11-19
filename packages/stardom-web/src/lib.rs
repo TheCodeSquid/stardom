@@ -64,12 +64,16 @@ impl DomNode {
         }))
     }
 
+    fn is(&self, flags: Flags) -> bool {
+        self.0.flags.contains(flags)
+    }
+
     pub fn native_parent(&self) -> Option<web_sys::Node> {
         self.0.native.parent_node()
     }
 
     pub fn native_target(&self) -> Option<web_sys::Node> {
-        if self.0.flags.contains(Flags::FRAGMENT) {
+        if self.is(Flags::FRAGMENT) {
             self.native_parent()
         } else {
             Some(self.0.native.clone())
@@ -77,7 +81,7 @@ impl DomNode {
     }
 
     pub fn first_node(&self) -> web_sys::Node {
-        if self.0.flags.contains(Flags::FRAGMENT) {
+        if self.is(Flags::FRAGMENT) {
             let children = self.0.children.borrow();
             if let Some(first) = children.first() {
                 return first.0.native.clone();
@@ -88,7 +92,7 @@ impl DomNode {
     }
 
     pub fn mount_to_native(&self, target: &web_sys::Node, before: Option<&web_sys::Node>) {
-        if self.0.flags.contains(Flags::FRAGMENT) {
+        if self.is(Flags::FRAGMENT) {
             let children = self.0.children.borrow();
             for child in &*children {
                 child.mount_to_native(target, before);
@@ -99,7 +103,7 @@ impl DomNode {
     }
 
     pub fn remove_from_native(&self, target: &web_sys::Node) {
-        if self.0.flags.contains(Flags::FRAGMENT) {
+        if self.is(Flags::FRAGMENT) {
             let children = self.0.children.borrow();
             for child in &*children {
                 child.remove_from_native(target);
@@ -214,9 +218,9 @@ impl Node for DomNode {
     }
 
     fn set_text(&self, content: &str) {
-        if self.0.flags.contains(Flags::TEXT) {
+        if self.is(Flags::TEXT) {
             self.0.native.set_text_content(Some(content));
-        } else if self.0.flags.contains(Flags::RAW) {
+        } else if self.is(Flags::RAW) {
             // TODO: clear children here
 
             let range = web_sys::Range::new().unwrap();
