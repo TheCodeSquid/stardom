@@ -1,3 +1,5 @@
+mod test;
+
 mod macros;
 
 use wasm_bindgen::{convert::FromWasmAbi, JsCast};
@@ -12,6 +14,8 @@ pub trait Node: Clone + Sized + 'static {
     fn raw() -> Self;
 
     fn parent(&self) -> Option<Self>;
+
+    fn children(&self) -> Vec<Self>;
 
     fn next_sibling(&self) -> Option<Self>;
 

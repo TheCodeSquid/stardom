@@ -1,5 +1,5 @@
 [package]
-name = "stardom-render"
+name = "stardom-hydrate"
 version = "0.1.0"
 edition = "2021"
 authors.workspace = true
@@ -8,9 +8,5 @@ license.workspace = true
 
 [dependencies]
 stardom-nodes = { version = "0.1", path = "../stardom-nodes" }
-
-indexmap = "2"
-
-[dev-dependencies]
-stardom-reactive = { path = "../stardom-reactive" }
-stardom-macros = { path = "../stardom-macros" }
+stardom-web = { version = "0.1", path = "../stardom-web" }
+stardom-render = { version = "0.1", path = "../stardom-render" }

@@ -28,3 +28,8 @@ features = [
   "NodeList",
   "Event"
 ]
+
+[dev-dependencies]
+stardom-reactive = { path = "../stardom-reactive" }
+stardom-macros = { path = "../stardom-macros" }
+wasm-bindgen-test = "0.3"

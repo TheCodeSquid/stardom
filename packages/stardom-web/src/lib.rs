@@ -156,6 +156,10 @@ impl Node for DomNode {
             .map(DomNode)
     }
 
+    fn children(&self) -> Vec<Self> {
+        self.0.children.borrow().clone()
+    }
+
     fn next_sibling(&self) -> Option<Self> {
         let parent = self.parent()?;
         let children = parent.0.children.borrow();
@@ -288,5 +292,18 @@ impl fmt::Debug for DomNode {
             .field("flags", &self.0.flags)
             .field("children", &self.0.children)
             .finish()
+    }
+}
+
+#[cfg(all(test, target_family = "wasm"))]
+mod tests {
+    use crate::DomNode;
+    use wasm_bindgen_test::*;
+
+    wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test]
+    fn node_behavior() {
+        stardom_nodes::behavior_tests!(DomNode);
     }
 }

@@ -7,6 +7,12 @@ use std::{
 use indexmap::IndexMap;
 use stardom_nodes::{EventKey, Node};
 
+// Reference: https://developer.mozilla.org/en-US/docs/Glossary/Void_element
+const VOID_ELEMENTS: &[&str] = &[
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
+    "track", "wbr",
+];
+
 #[derive(Clone, Debug)]
 pub struct NodeRef(Rc<RefCell<Inner>>);
 
@@ -63,6 +69,8 @@ impl fmt::Display for NodeRef {
 
                 if !indented.is_empty() {
                     write!(f, "<{tag}{attrs}>\n{indented}\n</{tag}>")
+                } else if VOID_ELEMENTS.contains(&tag.to_lowercase().as_str()) {
+                    write!(f, "<{tag}{attrs}>")
                 } else {
                     write!(f, "<{tag}{attrs}></{tag}>")
                 }
@@ -89,7 +97,7 @@ impl NodeRef {
         Self(Rc::new(RefCell::new(inner)))
     }
 
-    fn children(&self) -> Option<Ref<Vec<Self>>> {
+    fn children_ref(&self) -> Option<Ref<Vec<Self>>> {
         let inner = self.0.borrow();
         Ref::filter_map(inner, |inner| match &inner.kind {
             NodeKind::Element { children, .. } => Some(children),
@@ -145,9 +153,15 @@ impl Node for NodeRef {
             .map(NodeRef)
     }
 
+    fn children(&self) -> Vec<Self> {
+        self.children_ref()
+            .expect("only element and fragment nodes can have children")
+            .clone()
+    }
+
     fn next_sibling(&self) -> Option<Self> {
         let parent = self.parent()?;
-        let children = parent.children()?;
+        let children = parent.children_ref()?;
 
         let idx = children.iter().position(|node| node == self)?;
         children.get(idx + 1).cloned()
@@ -248,4 +262,14 @@ fn escape(text: &str) -> String {
         }
     }
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NodeRef;
+
+    #[test]
+    fn node_behavior() {
+        stardom_nodes::behavior_tests!(NodeRef);
+    }
 }
