@@ -1,0 +1,20 @@
+[package]
+name = "stardom"
+version = "0.1.0"
+edition = "2021"
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[features]
+default = ["web", "render"]
+web = ["dep:stardom-web"]
+render = ["dep:stardom-render"]
+
+[dependencies]
+stardom-reactive = { version = "0.1", path = "../stardom-reactive" }
+stardom-nodes = { version = "0.1", path = "../stardom-nodes" }
+stardom-macros = { version = "0.1", path = "../stardom-macros" }
+
+stardom-web = { version = "0.1", optional = true, path = "../stardom-web" }
+stardom-render = { version = "0.1", optional = true, path = "../stardom-render" }

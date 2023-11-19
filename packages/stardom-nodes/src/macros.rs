@@ -17,6 +17,22 @@ macro_rules! text_node {
 }
 
 #[macro_export]
+macro_rules! raw_node {
+    ($content:expr $(;* $parent:expr)?) => {{
+        let raw = stardom_nodes::Node::raw();
+
+        let r = ::std::clone::Clone::clone(&raw);
+        stardom_reactive::effect(move || {
+            let content = ::std::string::ToString::to_string(&$content);
+            stardom_nodes::Node::set_text(&r, &content);
+        });
+
+        $(stardom_nodes::Node::insert($parent, &raw, None);)?
+        raw
+    }}
+}
+
+#[macro_export]
 macro_rules! element {
     ($name:expr, $($body:tt)*) => {{
         let name = ::std::string::ToString::to_string(&$name);
