@@ -30,6 +30,19 @@ fn create_stmts(target: &syn::Expr, stmts: Vec<NodeStmt>) -> Vec<TokenStream> {
     stmts
         .into_iter()
         .map(|stmt| match stmt {
+            NodeStmt::Fragment(stmts) => {
+                let fragment = syn::parse_quote!(fragment);
+                let stmts = create_stmts(&fragment, stmts);
+
+                quote! {{
+                    let parent = #target;
+                    let #fragment = stardom_nodes::Node::fragment();
+
+                    #(#stmts)*
+
+                    stardom_nodes::Node::insert(parent, &#fragment, None);
+                }}
+            }
             NodeStmt::Macro(mut expr) => {
                 let tokens = expr.mac.tokens.clone();
                 expr.mac.tokens = quote_spanned! {tokens.span() =>
@@ -46,17 +59,17 @@ fn create_stmts(target: &syn::Expr, stmts: Vec<NodeStmt>) -> Vec<TokenStream> {
                 }}
             }
             NodeStmt::Text(expr) => {
-                quote_spanned! {expr.span() =>
-                    {
-                        let text = stardom_nodes::Node::text();
-                        stardom_nodes::Node::insert(#target, &text, None);
-                        let t = ::std::clone::Clone::clone(&text);
-                        stardom_reactive::effect(move || {
-                            let value = ::std::string::ToString::to_string(&#expr);
-                            stardom_nodes::Node::set_text(&t, &value);
-                        });
-                    }
-                }
+                quote_spanned! {expr.span() => {
+                    let parent = #target;
+                    let text = stardom_nodes::Node::text();
+                    stardom_nodes::Node::insert(parent, &text, None);
+
+                    let t = ::std::clone::Clone::clone(&text);
+                    stardom_reactive::effect(move || {
+                        let value = ::std::string::ToString::to_string(&#expr);
+                        stardom_nodes::Node::set_text(&t, &value);
+                    });
+                }}
             }
             NodeStmt::Attr { name, value } => {
                 quote_spanned! {value.span() => {

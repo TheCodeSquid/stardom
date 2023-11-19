@@ -1,6 +1,7 @@
 use syn::{
+    braced,
     parse::{Parse, ParseStream},
-    Error, Result, Token,
+    token, Error, Result, Token,
 };
 
 pub struct NodeBodyMacro {
@@ -57,6 +58,7 @@ impl Parse for NodeBody {
 pub enum NodeStmt {
     Macro(syn::ExprMacro),
     Child(syn::Expr),
+    Fragment(Vec<NodeStmt>),
     Text(syn::Expr),
     Attr { name: syn::Expr, value: syn::Expr },
     Event { name: syn::Expr, f: syn::Expr },
@@ -64,7 +66,31 @@ pub enum NodeStmt {
 
 impl Parse for NodeStmt {
     fn parse(input: ParseStream) -> Result<Self> {
-        let stmt = if input.peek(Token![+]) {
+        let stmt = if input.peek(token::Brace) {
+            let body;
+            braced!(body in input);
+
+            let mut stmts = vec![];
+            while !body.is_empty() {
+                if input.peek(Token![;]) {
+                    input.parse::<Token![;]>()?;
+                    continue;
+                }
+
+                stmts.push(input.parse()?);
+
+                if input.peek(Token![;]) {
+                    input.parse::<Token![;]>()?;
+                    continue;
+                } else if input.is_empty() {
+                    break;
+                } else {
+                    return Err(syn::Error::new(input.span(), "expected `;`"));
+                }
+            }
+
+            NodeStmt::Fragment(stmts)
+        } else if input.peek(Token![+]) {
             input.parse::<Token![+]>()?;
             let expr = input.parse()?;
 
