@@ -4,11 +4,12 @@ use anyhow::Result;
 use scraper::{ElementRef, Html};
 use serde::Serialize;
 
-const MDN_ELEMENTS: &str = "https://developer.mozilla.org/en-US/docs/Web/HTML/Element";
+const WHATWG_INDEX: &str = "https://html.spec.whatwg.org/multipage/indices.html";
 
 #[derive(Default, Serialize)]
 struct Data {
     elements: Vec<String>,
+    attributes: Vec<String>,
 }
 
 fn main() -> Result<()> {
@@ -18,28 +19,26 @@ fn main() -> Result<()> {
         .expect("missing output path");
 
     let mut data = Data::default();
-
     let fetcher = Fetcher::new();
-    let html = fetcher.fetch(MDN_ELEMENTS)?;
 
-    let skip = ["web_components", "obsolete", "see_also"];
-    let sections_select = format!(
-        "article section{}",
-        skip.map(|s| format!(":not([aria-labelledby^='{s}'])"))
-            .join("")
-    )
-    .as_str()
-    .try_into()
-    .unwrap();
+    // Elements
+    let html = fetcher.fetch(WHATWG_INDEX)?;
 
-    let elem_select = "tr td:first-child code".try_into().unwrap();
+    let select = "table:nth-of-type(1) tbody th code".try_into().unwrap();
+    for elem in html.select(&select) {
+        let name = text(&elem);
 
-    for section in html.select(&sections_select) {
-        for elem in section.select(&elem_select) {
-            let untrimmed = text(&elem);
-            let name = &untrimmed[1..untrimmed.len() - 1];
+        data.elements.push(name);
+    }
 
-            data.elements.push(name.to_string());
+    // Attributes
+
+    let select = "table:nth-of-type(3) tbody th code".try_into().unwrap();
+    for attr in html.select(&select) {
+        let name = text(&attr);
+
+        if !data.attributes.contains(&name) {
+            data.attributes.push(name);
         }
     }
 

@@ -21,14 +21,14 @@ pub struct Item {
 }
 
 impl ItemKey {
-    pub fn get(self, rt: &'static Runtime) -> Ref<Item> {
+    pub(crate) fn get(self, rt: &'static Runtime) -> Ref<Item> {
         let items = rt.items.borrow();
         Ref::map(items, |items| {
             items.get(self).expect("item used after internal drop")
         })
     }
 
-    pub fn get_mut(self, rt: &'static Runtime) -> RefMut<Item> {
+    pub(crate) fn get_mut(self, rt: &'static Runtime) -> RefMut<Item> {
         let items = rt.items.borrow_mut();
         RefMut::map(items, |items| {
             items.get_mut(self).expect("item used after internal drop")

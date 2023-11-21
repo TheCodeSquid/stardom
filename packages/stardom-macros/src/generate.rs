@@ -100,6 +100,7 @@ pub fn tagged_macros(element_macro_path: syn::Path) -> TokenStream {
             let lit = syn::LitStr::new(elem, Span::call_site());
 
             quote! {
+                #[doc = concat!("&lt;", #lit, "&gt;")]
                 #[macro_export]
                 macro_rules! #ident {
                     ($($body:tt)*) => {
