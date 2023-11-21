@@ -9,6 +9,8 @@ license.workspace = true
 [dependencies]
 stardom-macros = { version = "0.1.0", path = "../stardom-macros" }
 
+bitflags = "2"
+
 wasm-bindgen = "0.2"
 
 [dependencies.web-sys]

@@ -7,9 +7,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-stardom-nodes = { version = "0.1", path = "../stardom-nodes" }
-
-bitflags = "2"
+stardom-nodes = { path = "../stardom-nodes" }
 
 wasm-bindgen = { version = "0.2", features = ["enable-interning"] }
 js-sys = "0.3"

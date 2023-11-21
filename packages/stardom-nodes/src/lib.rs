@@ -1,8 +1,20 @@
-mod test;
-
 mod macros;
 
 use wasm_bindgen::{convert::FromWasmAbi, JsCast};
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum NodeType {
+    Element,
+    Text,
+    Fragment,
+    Raw,
+}
+
+impl NodeType {
+    pub fn is_container(&self) -> bool {
+        matches!(self, NodeType::Element | NodeType::Fragment)
+    }
+}
 
 pub trait Node: Clone + Sized + 'static {
     fn element(namespace: Option<&str>, name: &str) -> Self;
@@ -12,6 +24,8 @@ pub trait Node: Clone + Sized + 'static {
     fn fragment() -> Self;
 
     fn raw() -> Self;
+
+    fn ty(&self) -> NodeType;
 
     fn parent(&self) -> Option<Self>;
 
@@ -24,6 +38,8 @@ pub trait Node: Clone + Sized + 'static {
     fn remove(&self, child: &Self);
 
     fn set_text(&self, content: &str);
+
+    fn attr(&self, name: &str) -> Option<String>;
 
     fn set_attr(&self, name: &str, value: &str);
 

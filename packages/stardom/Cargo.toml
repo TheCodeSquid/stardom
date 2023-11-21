@@ -6,15 +6,10 @@ authors.workspace = true
 repository.workspace = true
 license.workspace = true
 
-[features]
-default = ["web", "render"]
-web = ["dep:stardom-web"]
-render = ["dep:stardom-render"]
-
 [dependencies]
-stardom-reactive = { version = "0.1", path = "../stardom-reactive" }
-stardom-nodes = { version = "0.1", path = "../stardom-nodes" }
-stardom-macros = { version = "0.1", path = "../stardom-macros" }
+stardom-reactive = { path = "../stardom-reactive" }
+stardom-nodes = { path = "../stardom-nodes" }
+stardom-macros = { path = "../stardom-macros" }
 
-stardom-web = { version = "0.1", optional = true, path = "../stardom-web" }
-stardom-render = { version = "0.1", optional = true, path = "../stardom-render" }
+stardom-web = { path = "../stardom-web" }
+stardom-render = { path = "../stardom-render" }

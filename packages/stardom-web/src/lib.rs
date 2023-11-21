@@ -1,12 +1,10 @@
 use std::{
     cell::RefCell,
-    fmt, mem,
     rc::{Rc, Weak},
     thread_local,
 };
 
-use bitflags::bitflags;
-use stardom_nodes::{EventKey, Node};
+use stardom_nodes::{EventKey, Node, NodeType};
 use wasm_bindgen::{intern, prelude::*};
 
 thread_local! {
@@ -20,33 +18,16 @@ pub fn document() -> web_sys::Document {
     DOCUMENT.with(Clone::clone)
 }
 
-pub fn mount(node: DomNode, selector: &str) {
-    let root = document()
-        .query_selector(selector)
-        .unwrap()
-        .expect("node mount point not found");
-    node.mount_to_native(&root, None);
-    mem::forget(node);
-}
-
-bitflags! {
-    #[derive(Clone, Copy, Debug)]
-    struct Flags: u8 {
-        const TEXT = 0b001;
-        const FRAGMENT = 0b010;
-        const RAW = 0b100;
-    }
-}
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DomNode(Rc<Inner>);
 
 type WeakNode = Weak<Inner>;
 type EventClosure = Closure<dyn Fn(web_sys::Event)>;
 
+#[derive(Debug)]
 struct Inner {
     native: web_sys::Node,
-    flags: Flags,
+    ty: NodeType,
 
     parent: RefCell<Option<WeakNode>>,
     children: RefCell<Vec<DomNode>>,
@@ -54,34 +35,52 @@ struct Inner {
 }
 
 impl DomNode {
-    fn new(native: web_sys::Node, flags: Flags) -> Self {
+    fn new(native: web_sys::Node, ty: NodeType) -> Self {
         Self(Rc::new(Inner {
             native,
-            flags,
+            ty,
             parent: RefCell::default(),
             children: RefCell::default(),
             events: RefCell::default(),
         }))
     }
 
-    fn is(&self, flags: Flags) -> bool {
-        self.0.flags.contains(flags)
+    pub fn native(&self) -> &web_sys::Node {
+        &self.0.native
     }
 
-    pub fn native_parent(&self) -> Option<web_sys::Node> {
+    fn is_virtual(&self) -> bool {
+        matches!(self.ty(), NodeType::Fragment | NodeType::Raw)
+    }
+
+    fn from_native(native: web_sys::Node) -> Option<Self> {
+        let ty = if native.has_type::<web_sys::Element>() {
+            NodeType::Element
+        } else if native.has_type::<web_sys::Text>() {
+            NodeType::Text
+        } else if native.has_type::<web_sys::Comment>() {
+            NodeType::Fragment
+        } else {
+            return None;
+        };
+
+        Some(Self::new(native, ty))
+    }
+
+    fn native_parent(&self) -> Option<web_sys::Node> {
         self.0.native.parent_node()
     }
 
-    pub fn native_target(&self) -> Option<web_sys::Node> {
-        if self.is(Flags::FRAGMENT) {
+    fn native_target(&self) -> Option<web_sys::Node> {
+        if self.is_virtual() {
             self.native_parent()
         } else {
             Some(self.0.native.clone())
         }
     }
 
-    pub fn first_node(&self) -> web_sys::Node {
-        if self.is(Flags::FRAGMENT) {
+    fn first_node(&self) -> web_sys::Node {
+        if self.is_virtual() {
             let children = self.0.children.borrow();
             if let Some(first) = children.first() {
                 return first.0.native.clone();
@@ -92,7 +91,7 @@ impl DomNode {
     }
 
     pub fn mount_to_native(&self, target: &web_sys::Node, before: Option<&web_sys::Node>) {
-        if self.is(Flags::FRAGMENT) {
+        if self.is_virtual() {
             let children = self.0.children.borrow();
             for child in &*children {
                 child.mount_to_native(target, before);
@@ -103,7 +102,7 @@ impl DomNode {
     }
 
     pub fn remove_from_native(&self, target: &web_sys::Node) {
-        if self.is(Flags::FRAGMENT) {
+        if self.is_virtual() {
             let children = self.0.children.borrow();
             for child in &*children {
                 child.remove_from_native(target);
@@ -126,25 +125,29 @@ impl Node for DomNode {
             })
             .unwrap();
 
-        Self::new(native.unchecked_into(), Flags::empty())
+        Self::new(native.unchecked_into(), NodeType::Element)
     }
 
     fn text() -> Self {
         let native = web_sys::Text::new().unwrap();
 
-        Self::new(native.unchecked_into(), Flags::TEXT)
+        Self::new(native.unchecked_into(), NodeType::Text)
     }
 
     fn fragment() -> Self {
         let native = web_sys::Comment::new().unwrap();
 
-        Self::new(native.unchecked_into(), Flags::FRAGMENT)
+        Self::new(native.unchecked_into(), NodeType::Fragment)
     }
 
     fn raw() -> Self {
         let native = web_sys::Comment::new().unwrap();
 
-        Self::new(native.unchecked_into(), Flags::FRAGMENT | Flags::RAW)
+        Self::new(native.unchecked_into(), NodeType::Raw)
+    }
+
+    fn ty(&self) -> NodeType {
+        self.0.ty
     }
 
     fn parent(&self) -> Option<Self> {
@@ -184,7 +187,15 @@ impl Node for DomNode {
         child.0.parent.borrow_mut().replace(Rc::downgrade(&self.0));
 
         if let Some(target) = self.native_target() {
-            child.mount_to_native(&target, before.map(|node| node.first_node()).as_ref());
+            let before = before.map(|node| node.first_node()).or_else(|| {
+                if self.is_virtual() {
+                    self.native().next_sibling()
+                } else {
+                    None
+                }
+            });
+
+            child.mount_to_native(&target, before.as_ref());
         }
     }
 
@@ -204,29 +215,43 @@ impl Node for DomNode {
     }
 
     fn set_text(&self, content: &str) {
-        if self.is(Flags::TEXT) {
-            self.0.native.set_text_content(Some(content));
-        } else if self.is(Flags::RAW) {
-            for child in self.0.children.borrow().clone() {
-                self.remove(&child);
+        match self.ty() {
+            NodeType::Text => {
+                self.0.native.set_text_content(Some(content));
             }
+            NodeType::Raw => {
+                for child in self.0.children.borrow().clone() {
+                    self.remove(&child);
+                }
 
-            let range = web_sys::Range::new().unwrap();
-            let doc = range.create_contextual_fragment(content).unwrap();
-            let native_nodes = doc.child_nodes();
+                let range = web_sys::Range::new().unwrap();
+                let doc = range.create_contextual_fragment(content).unwrap();
+                let native_nodes = doc.child_nodes();
 
-            for i in 0..native_nodes.length() {
-                let native = native_nodes.get(i).unwrap();
-                let holder = Self::new(native, Flags::empty());
-                self.insert(&holder, None);
+                for i in 0..native_nodes.length() {
+                    let native = native_nodes.get(i).unwrap();
+                    if let Some(node) = Self::from_native(native) {
+                        self.insert(&node, None);
+                    }
+                }
             }
+            _ => panic!("can only set text content of text or raw nodes"),
+        }
+    }
+
+    fn attr(&self, name: &str) -> Option<String> {
+        if self.ty() == NodeType::Element {
+            self.0
+                .native
+                .unchecked_ref::<web_sys::Element>()
+                .get_attribute(name)
         } else {
-            panic!("can only set text content of text or raw nodes");
+            panic!("attributes only exist on element nodes");
         }
     }
 
     fn set_attr(&self, name: &str, value: &str) {
-        if self.0.flags.is_empty() {
+        if self.ty() == NodeType::Element {
             self.0
                 .native
                 .unchecked_ref::<web_sys::Element>()
@@ -238,7 +263,7 @@ impl Node for DomNode {
     }
 
     fn remove_attr(&self, name: &str) {
-        if self.0.flags.is_empty() {
+        if self.ty() == NodeType::Element {
             self.0
                 .native
                 .unchecked_ref::<web_sys::Element>()
@@ -254,7 +279,7 @@ impl Node for DomNode {
         E: EventKey,
         F: Fn(E::Event) + 'static,
     {
-        if !self.0.flags.is_empty() {
+        if self.ty() != NodeType::Element {
             panic!("can only set events on element nodes");
         }
 
@@ -285,25 +310,26 @@ impl PartialEq for DomNode {
 
 impl Eq for DomNode {}
 
-impl fmt::Debug for DomNode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("DomNode")
-            .field("native", &self.0.native)
-            .field("flags", &self.0.flags)
-            .field("children", &self.0.children)
-            .finish()
-    }
-}
-
 #[cfg(all(test, target_family = "wasm"))]
 mod tests {
-    use crate::DomNode;
+    use crate::{DomNode as N, Node};
     use wasm_bindgen_test::*;
 
     wasm_bindgen_test_configure!(run_in_browser);
 
     #[wasm_bindgen_test]
-    fn node_behavior() {
-        stardom_nodes::behavior_tests!(DomNode);
+    fn fragment_insertion() {
+        let root = N::element(None, "div");
+
+        let last = N::text();
+        root.insert(&last, None);
+
+        let outer = N::fragment();
+        let inner = N::text();
+
+        root.insert(&outer, Some(&last));
+        outer.insert(&inner, None);
+
+        assert_eq!(inner.native().next_sibling(), Some(last.native().clone()));
     }
 }
