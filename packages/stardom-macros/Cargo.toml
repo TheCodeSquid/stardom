@@ -3,6 +3,8 @@ name = "stardom-macros"
 version = "0.1.0"
 edition = "2021"
 authors.workspace = true
+description.workspace = true
+readme.workspace = true
 repository.workspace = true
 license.workspace = true
 
