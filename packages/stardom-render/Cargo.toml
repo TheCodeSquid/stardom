@@ -9,7 +9,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-stardom-nodes = { path = "../stardom-nodes" }
+stardom-nodes = { version = "0.1.0", path = "../stardom-nodes" }
 
 indexmap = "2"
 

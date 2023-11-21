@@ -9,9 +9,9 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-stardom-reactive = { path = "../stardom-reactive" }
-stardom-nodes = { path = "../stardom-nodes" }
-stardom-macros = { path = "../stardom-macros" }
+stardom-reactive = { version = "0.1.0", path = "../stardom-reactive" }
+stardom-nodes = { version = "0.1.0", path = "../stardom-nodes" }
+stardom-macros = { version = "0.1.0", path = "../stardom-macros" }
 
-stardom-web = { path = "../stardom-web" }
-stardom-render = { path = "../stardom-render" }
+stardom-web = { version = "0.1.0", path = "../stardom-web" }
+stardom-render = { version = "0.1.0", path = "../stardom-render" }
