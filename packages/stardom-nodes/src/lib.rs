@@ -2,6 +2,8 @@ mod macros;
 
 use wasm_bindgen::{convert::FromWasmAbi, JsCast};
 
+pub use macros::attributes;
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum NodeType {
     Element,
@@ -16,7 +18,7 @@ impl NodeType {
     }
 }
 
-pub trait Node: Clone + Sized + 'static {
+pub trait Node: PartialEq + Clone + Sized + 'static {
     fn element(namespace: Option<&str>, name: &str) -> Self;
 
     fn text() -> Self;

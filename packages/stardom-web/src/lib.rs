@@ -8,10 +8,16 @@ use stardom_nodes::{EventKey, Node, NodeType};
 use wasm_bindgen::{intern, prelude::*};
 
 thread_local! {
+    static WINDOW: web_sys::Window = web_sys::window().unwrap();
+
     static DOCUMENT: web_sys::Document = web_sys::window()
         .unwrap()
         .document()
         .unwrap();
+}
+
+pub fn window() -> web_sys::Window {
+    WINDOW.with(Clone::clone)
 }
 
 pub fn document() -> web_sys::Document {

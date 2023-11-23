@@ -20,6 +20,7 @@ pub struct Runtime {
 
     pub(crate) tracking: Cell<bool>,
     pub(crate) active: RefCell<Vec<ItemKey>>,
+    pub(crate) parent: RefCell<Vec<Option<ItemKey>>>,
     pub(crate) queue: RefCell<Vec<ItemKey>>,
 }
 
@@ -30,6 +31,7 @@ impl Default for Runtime {
             scopes: RefCell::default(),
             tracking: Cell::new(true),
             active: RefCell::default(),
+            parent: RefCell::default(),
             queue: RefCell::default(),
         }
     }
@@ -61,9 +63,20 @@ impl Runtime {
         Self::global().expect("no active runtime")
     }
 
+    pub fn active(&self) -> Option<ItemKey> {
+        self.active.borrow().last().cloned()
+    }
+
+    pub fn with_parent<T, F: FnOnce() -> T>(&self, parent: Option<ItemKey>, f: F) -> T {
+        self.parent.borrow_mut().push(parent);
+        let value = f();
+        self.parent.borrow_mut().pop();
+        value
+    }
+
     pub(crate) fn register(&self, item: Item) -> ItemKey {
         let key = self.items.borrow_mut().insert(item);
-        self.add_to_active(key);
+        self.add_to_parent(key);
         key
     }
 
@@ -72,15 +85,15 @@ impl Runtime {
         F: FnOnce(ItemKey) -> Item,
     {
         let key = self.items.borrow_mut().insert_with_key(f);
-        self.add_to_active(key);
+        self.add_to_parent(key);
         key
     }
 
-    pub(crate) fn add_to_active(&self, key: ItemKey) {
-        if let Some(active) = self.active.borrow().last() {
+    pub(crate) fn add_to_parent(&self, key: ItemKey) {
+        if let Some(parent) = self.parent.borrow().last().cloned().and_then(|o| o) {
             let mut scopes = self.scopes.borrow_mut();
             scopes
-                .entry(*active)
+                .entry(parent)
                 .unwrap()
                 .and_modify(|v| v.push(key))
                 .or_insert(vec![key]);

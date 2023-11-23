@@ -28,6 +28,8 @@ pub mod prelude {
 
     pub use crate::{
         nodes::*,
-        reactive::{effect, lazy_effect, memo, signal, untrack, Track, Trigger},
+        reactive::{
+            effect, lazy_effect, memo, signal, untrack, Effect, Memo, Signal, Track, Trigger,
+        },
     };
 }

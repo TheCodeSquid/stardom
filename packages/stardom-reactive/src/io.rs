@@ -31,8 +31,8 @@ pub trait Track<T: 'static> {
             return;
         }
 
-        if let Some(active) = rt.active.borrow().last() {
-            self.track(&ItemKeyWrapper(rt, *active));
+        if let Some(active) = rt.active() {
+            self.track(&ItemKeyWrapper(rt, active));
         }
     }
 

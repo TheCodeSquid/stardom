@@ -51,13 +51,14 @@ impl Parse for NodeBody {
             }
         }
 
-        Ok(NodeBody { stmts, parent })
+        Ok(Self { stmts, parent })
     }
 }
 
 pub enum NodeStmt {
-    Macro(syn::ExprMacro),
     Child(syn::Expr),
+    Macro(syn::ExprMacro),
+    Match(syn::ExprMatch),
     Fragment(token::Brace, Vec<NodeStmt>),
     Text(syn::Expr),
     Attr { name: syn::Expr, value: syn::Expr },
@@ -89,35 +90,35 @@ impl Parse for NodeStmt {
                 }
             }
 
-            NodeStmt::Fragment(brace, stmts)
+            Self::Fragment(brace, stmts)
         } else if input.peek(Token![+]) {
             input.parse::<Token![+]>()?;
             let expr = input.parse()?;
 
-            NodeStmt::Text(expr)
-        } else if input.peek(Token![#]) {
-            input.parse::<Token![#]>()?;
+            Self::Text(expr)
+        } else if input.peek(Token![.]) {
+            input.parse::<Token![.]>()?;
             let name = input.parse()?;
             input.parse::<Token![=>]>()?;
             let value = input.parse()?;
 
-            NodeStmt::Attr { name, value }
+            Self::Attr { name, value }
         } else if input.peek(Token![@]) {
             input.parse::<Token![@]>()?;
             let name = input.parse()?;
             input.parse::<Token![=>]>()?;
             let f = input.parse()?;
 
-            NodeStmt::Event { name, f }
+            Self::Event { name, f }
         } else {
             let expr: syn::Expr = input
                 .parse()
-                .map_err(|_| input.error("expected `{`, `+`, `#`, `@`, or an expression"))?;
+                .map_err(|_| input.error("expected `{`, `+`, `.`, `@`, or an expression"))?;
 
-            if let syn::Expr::Macro(expr) = expr {
-                NodeStmt::Macro(expr)
-            } else {
-                NodeStmt::Child(expr)
+            match expr {
+                syn::Expr::Macro(expr) => Self::Macro(expr),
+                syn::Expr::Match(expr) => Self::Match(expr),
+                _ => Self::Child(expr),
             }
         };
 

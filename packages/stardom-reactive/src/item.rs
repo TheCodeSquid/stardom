@@ -17,6 +17,7 @@ pub struct Item {
     pub value: Option<Box<dyn Any>>,
     pub action: Option<Box<dyn Fn()>>,
 
+    pub parent: Option<ItemKey>,
     pub dependents: Vec<ItemKey>,
 }
 
@@ -86,11 +87,13 @@ impl ItemKey {
 
     pub fn run(self, rt: &'static Runtime) {
         let action = self.get_mut(rt).action.take().unwrap();
+        let prev = rt.tracking.replace(true);
         rt.active.borrow_mut().push(self);
 
-        action();
+        rt.with_parent(Some(self), &action);
 
         rt.active.borrow_mut().pop();
+        rt.tracking.set(prev);
         self.get_mut(rt).action.replace(action);
 
         let queue = mem::take(&mut *rt.queue.borrow_mut());

@@ -1,8 +1,8 @@
 use syn::parse_macro_input;
 
+mod dom;
 mod generate;
 mod parse;
-mod tagged;
 
 use parse::NodeBodyMacro;
 
@@ -14,8 +14,11 @@ pub fn node_body(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 #[proc_macro]
-pub fn create_tagged_macros(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let path = parse_macro_input!(input as syn::Path);
+pub fn create_element_macros(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    generate::tagged_macros().into()
+}
 
-    generate::tagged_macros(path).into()
+#[proc_macro]
+pub fn create_attributes(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    generate::attributes().into()
 }
