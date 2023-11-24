@@ -1,30 +1,34 @@
 use crate::{
-    item::{Item, ItemKey},
-    Runnable, Runtime,
+    item::{Item, Run},
+    ItemKey, Runtime,
 };
 
 #[derive(Clone, Copy)]
 pub struct Effect {
     rt: &'static Runtime,
-    item: ItemKey,
+    key: ItemKey,
 }
 
 impl Effect {
-    pub(crate) fn new<F: Fn() + 'static>(rt: &'static Runtime, f: F) -> Self {
-        let item = rt.register(Item {
+    pub fn new<F>(rt: &'static Runtime, parent: Option<ItemKey>, f: F) -> Self
+    where
+        F: FnMut() + 'static,
+    {
+        let item = Item {
             action: Some(Box::new(f)),
+            parent,
             ..Default::default()
-        });
-        Self { rt, item }
+        };
+
+        Self {
+            rt,
+            key: rt.add(item),
+        }
     }
 }
 
-impl Runnable for Effect {
+impl Run for Effect {
     fn run(&self) {
-        self.item.run(self.rt)
-    }
-
-    fn item_key(&self) -> ItemKey {
-        self.item
+        self.key.run(self.rt);
     }
 }

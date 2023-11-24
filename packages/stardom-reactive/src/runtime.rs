@@ -6,35 +6,21 @@ use std::{
 use slotmap::{SlotMap, SparseSecondaryMap};
 
 use crate::{
-    item::{Item, ItemKey},
-    Effect, Memo, Runnable, Signal,
+    item::{Item, ItemKey, Run},
+    Effect, Signal,
 };
 
 thread_local! {
     static RUNTIME: Cell<Option<&'static Runtime>> = const { Cell::new(None) };
 }
 
+#[derive(Default)]
 pub struct Runtime {
     pub(crate) items: RefCell<SlotMap<ItemKey, Item>>,
     pub(crate) scopes: RefCell<SparseSecondaryMap<ItemKey, Vec<ItemKey>>>,
 
-    pub(crate) tracking: Cell<bool>,
+    pub(crate) not_tracking: Cell<bool>,
     pub(crate) active: RefCell<Vec<ItemKey>>,
-    pub(crate) parent: RefCell<Vec<Option<ItemKey>>>,
-    pub(crate) queue: RefCell<Vec<ItemKey>>,
-}
-
-impl Default for Runtime {
-    fn default() -> Self {
-        Self {
-            items: RefCell::default(),
-            scopes: RefCell::default(),
-            tracking: Cell::new(true),
-            active: RefCell::default(),
-            parent: RefCell::default(),
-            queue: RefCell::default(),
-        }
-    }
 }
 
 impl Runtime {
@@ -63,96 +49,68 @@ impl Runtime {
         Self::global().expect("no active runtime")
     }
 
+    pub fn untrack<T, F: FnOnce() -> T>(&self, f: F) -> T {
+        let prev = self.not_tracking.replace(true);
+        let value = f();
+        self.not_tracking.set(prev);
+        value
+    }
+
     pub fn active(&self) -> Option<ItemKey> {
-        self.active.borrow().last().cloned()
+        self.active.borrow().last().copied()
     }
 
-    pub fn with_parent<T, F: FnOnce() -> T>(&self, parent: Option<ItemKey>, f: F) -> T {
-        self.parent.borrow_mut().push(parent);
-        let value = f();
-        self.parent.borrow_mut().pop();
-        value
-    }
-
-    pub(crate) fn register(&self, item: Item) -> ItemKey {
+    pub(crate) fn add(&self, item: Item) -> ItemKey {
+        let parent = item.parent;
         let key = self.items.borrow_mut().insert(item);
-        self.add_to_parent(key);
-        key
-    }
-
-    pub(crate) fn register_with_key<F>(&self, f: F) -> ItemKey
-    where
-        F: FnOnce(ItemKey) -> Item,
-    {
-        let key = self.items.borrow_mut().insert_with_key(f);
-        self.add_to_parent(key);
-        key
-    }
-
-    pub(crate) fn add_to_parent(&self, key: ItemKey) {
-        if let Some(parent) = self.parent.borrow().last().cloned().and_then(|o| o) {
-            let mut scopes = self.scopes.borrow_mut();
-            scopes
+        if let Some(parent) = parent {
+            self.scopes
+                .borrow_mut()
                 .entry(parent)
-                .unwrap()
-                .and_modify(|v| v.push(key))
-                .or_insert(vec![key]);
+                .expect("item used after internal drop")
+                .and_modify(|scope| scope.push(key))
+                .or_insert_with(|| vec![key]);
         }
+        key
     }
 
-    pub fn effect<F: Fn() + 'static>(&'static self, f: F) -> Effect {
-        let effect = self.lazy_effect(f);
-        effect.run();
-        effect
-    }
+    pub(crate) fn remove(&self, key: ItemKey) {
+        if let Some(scope) = self.scopes.borrow_mut().remove(key) {
+            for key in scope {
+                self.remove(key);
+            }
+        }
 
-    pub fn lazy_effect<F: Fn() + 'static>(&'static self, f: F) -> Effect {
-        Effect::new(self, f)
-    }
-
-    pub fn signal<T: 'static>(&'static self, value: T) -> Signal<T> {
-        Signal::new(self, value)
-    }
-
-    pub fn memo<T, F>(&'static self, f: F) -> Memo<T>
-    where
-        T: 'static,
-        F: Fn() -> T + 'static,
-    {
-        Memo::new(self, f)
+        self.items.borrow_mut().remove(key);
     }
 }
 
-pub fn untrack<T, F>(f: F) -> T
-where
-    F: FnOnce() -> T,
-{
-    if let Some(rt) = Runtime::global() {
-        let old = rt.tracking.replace(false);
-        let value = f();
-        rt.tracking.set(old);
-        value
-    } else {
-        f()
-    }
+pub fn init() {
+    Runtime::new().init();
 }
 
-pub fn effect<F: Fn() + 'static>(f: F) -> Effect {
-    Runtime::unwrap_global().effect(f)
+pub fn untrack<T, F: FnOnce() -> T>(f: F) -> T {
+    Runtime::unwrap_global().untrack(f)
 }
 
-pub fn lazy_effect<F: Fn() + 'static>(f: F) -> Effect {
-    Runtime::unwrap_global().lazy_effect(f)
+pub fn signal_in<T: 'static>(parent: Option<ItemKey>, value: T) -> Signal<T> {
+    Signal::new(Runtime::unwrap_global(), parent, value)
 }
 
 pub fn signal<T: 'static>(value: T) -> Signal<T> {
-    Runtime::unwrap_global().signal(value)
+    let rt = Runtime::unwrap_global();
+    Signal::new(rt, rt.active(), value)
 }
 
-pub fn memo<T, F>(f: F) -> Memo<T>
-where
-    T: 'static,
-    F: Fn() -> T + 'static,
-{
-    Runtime::unwrap_global().memo(f)
+pub fn effect_in<F: FnMut() + 'static>(parent: Option<ItemKey>, f: F) -> Effect {
+    let effect = Effect::new(Runtime::unwrap_global(), parent, f);
+    effect.run();
+    effect
+}
+
+pub fn effect<F: FnMut() + 'static>(f: F) -> Effect {
+    let rt = Runtime::unwrap_global();
+    let effect = Effect::new(rt, rt.active(), f);
+    effect.run();
+    effect
 }

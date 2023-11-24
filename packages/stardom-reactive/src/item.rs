@@ -13,100 +13,110 @@ new_key_type! {
 }
 
 #[derive(Default)]
-pub struct Item {
+pub(crate) struct Item {
     pub value: Option<Box<dyn Any>>,
-    pub action: Option<Box<dyn Fn()>>,
+    pub action: Option<Box<dyn FnMut()>>,
 
     pub parent: Option<ItemKey>,
     pub dependents: Vec<ItemKey>,
 }
 
 impl ItemKey {
-    pub(crate) fn get(self, rt: &'static Runtime) -> Ref<Item> {
+    pub(crate) fn get(&self, rt: &'static Runtime) -> Ref<Item> {
         let items = rt.items.borrow();
         Ref::map(items, |items| {
-            items.get(self).expect("item used after internal drop")
+            items.get(*self).expect("item used after internal drop")
         })
     }
 
-    pub(crate) fn get_mut(self, rt: &'static Runtime) -> RefMut<Item> {
+    pub(crate) fn get_mut(&self, rt: &'static Runtime) -> RefMut<Item> {
         let items = rt.items.borrow_mut();
         RefMut::map(items, |items| {
-            items.get_mut(self).expect("item used after internal drop")
+            items.get_mut(*self).expect("item used after internal drop")
         })
     }
 
-    pub fn value<T: 'static>(self, rt: &'static Runtime) -> Ref<T> {
-        let item = self.get(rt);
-        Ref::map(item, |item| {
+    pub(crate) fn value<T: 'static>(&self, rt: &'static Runtime) -> Ref<T> {
+        Ref::map(self.get(rt), |item| {
             item.value
                 .as_ref()
-                .unwrap()
+                .expect("item holds no value")
                 .downcast_ref()
-                .expect("value type mismatch")
+                .expect("dynamic item type mismatch")
         })
     }
 
-    pub fn value_mut<T: 'static>(self, rt: &'static Runtime) -> RefMut<T> {
-        let item = self.get_mut(rt);
-        RefMut::map(item, |item| {
+    pub(crate) fn value_mut<T: 'static>(&self, rt: &'static Runtime) -> RefMut<T> {
+        RefMut::map(self.get_mut(rt), |item| {
             item.value
                 .as_mut()
-                .unwrap()
+                .expect("item holds no value")
                 .downcast_mut()
-                .expect("value type mismatch")
+                .expect("dynamic item type mismatch")
         })
     }
 
-    pub fn track(self, rt: &'static Runtime, dependent: Self) {
-        let mut item = self.get_mut(rt);
-        if !item.dependents.contains(&dependent) {
-            item.dependents.push(dependent);
-        }
-    }
+    pub(crate) fn run(&self, rt: &'static Runtime) {
+        rt.active.borrow_mut().push(*self);
 
-    pub fn trigger(self, rt: &'static Runtime) {
-        let dependents = {
-            let mut item = self.get_mut(rt);
-            mem::take(&mut item.dependents)
-        };
-
-        if rt.active.borrow().is_empty() {
-            for key in dependents {
-                key.run(rt);
-            }
-        } else {
-            let mut queue = rt.queue.borrow_mut();
-            for key in dependents {
-                if !queue.contains(&key) {
-                    queue.push(key);
-                }
-            }
-        }
-    }
-
-    pub fn run(self, rt: &'static Runtime) {
-        let action = self.get_mut(rt).action.take().unwrap();
-        let prev = rt.tracking.replace(true);
-        rt.active.borrow_mut().push(self);
-
-        rt.with_parent(Some(self), &action);
+        let mut action = mem::take(&mut self.get_mut(rt).action);
+        (action.as_deref_mut().expect("item hold no action"))();
+        self.get_mut(rt).action = action;
 
         rt.active.borrow_mut().pop();
-        rt.tracking.set(prev);
-        self.get_mut(rt).action.replace(action);
 
-        let queue = mem::take(&mut *rt.queue.borrow_mut());
-        for item in queue {
-            item.run(rt);
-        }
-
-        let mut scopes = rt.scopes.borrow_mut();
-        if let Some(list) = scopes.remove(self) {
-            let mut items = rt.items.borrow_mut();
-            for key in list {
-                items.remove(key);
-            }
+        for key in mem::take(&mut rt.scopes.borrow_mut().remove(*self).unwrap_or_default()) {
+            rt.remove(key);
         }
     }
+
+    pub(crate) fn track(&self, rt: &'static Runtime) {
+        if rt.not_tracking.get() {
+            return;
+        }
+
+        if let Some(active) = rt.active() {
+            let mut item = self.get_mut(rt);
+            item.dependents.push(active);
+        }
+    }
+
+    pub(crate) fn trigger(&self, rt: &'static Runtime) {
+        let dependents = mem::take(&mut self.get_mut(rt).dependents);
+
+        for key in dependents {
+            key.run(rt);
+        }
+    }
+}
+
+pub trait Read<T: 'static> {
+    fn track(&self);
+
+    fn with<U, F: FnOnce(&T) -> U>(&self, f: F) -> U;
+
+    fn get(&self) -> T
+    where
+        T: Copy,
+    {
+        self.with(|value| *value)
+    }
+}
+
+pub trait Write<T: 'static> {
+    fn trigger(&self);
+
+    fn update<U, F: FnOnce(&mut T) -> U>(&self, f: F) -> U;
+
+    fn replace(&self, value: T) -> T {
+        self.update(|current| mem::replace(current, value))
+    }
+
+    fn set(&self, value: T) {
+        self.replace(value);
+    }
+}
+
+pub trait Run {
+    fn run(&self);
 }
