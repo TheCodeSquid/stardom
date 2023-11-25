@@ -62,7 +62,7 @@ pub enum NodeStmt {
     Fragment(token::Brace, Vec<NodeStmt>),
     Text(syn::Expr),
     Attr { name: syn::Expr, value: syn::Expr },
-    Event { name: syn::Expr, f: syn::Expr },
+    Event { key: syn::Expr, f: syn::Expr },
 }
 
 impl Parse for NodeStmt {
@@ -105,20 +105,22 @@ impl Parse for NodeStmt {
             Self::Attr { name, value }
         } else if input.peek(Token![@]) {
             input.parse::<Token![@]>()?;
-            let name = input.parse()?;
+            let key = input.parse()?;
             input.parse::<Token![=>]>()?;
             let f = input.parse()?;
 
-            Self::Event { name, f }
+            Self::Event { key, f }
+        } else if input.peek(Token![match]) {
+            Self::Match(input.parse()?)
         } else {
             let expr: syn::Expr = input
                 .parse()
                 .map_err(|_| input.error("expected `{`, `+`, `.`, `@`, or an expression"))?;
 
-            match expr {
-                syn::Expr::Macro(expr) => Self::Macro(expr),
-                syn::Expr::Match(expr) => Self::Match(expr),
-                _ => Self::Child(expr),
+            if let syn::Expr::Macro(expr) = expr {
+                Self::Macro(expr)
+            } else {
+                Self::Child(expr)
             }
         };
 

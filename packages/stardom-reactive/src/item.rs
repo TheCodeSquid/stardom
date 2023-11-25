@@ -60,7 +60,7 @@ impl ItemKey {
         rt.active.borrow_mut().push(*self);
 
         let mut action = mem::take(&mut self.get_mut(rt).action);
-        (action.as_deref_mut().expect("item hold no action"))();
+        (action.as_deref_mut().expect("item holds no action"))();
         self.get_mut(rt).action = action;
 
         rt.active.borrow_mut().pop();
@@ -77,7 +77,9 @@ impl ItemKey {
 
         if let Some(active) = rt.active() {
             let mut item = self.get_mut(rt);
-            item.dependents.push(active);
+            if !item.dependents.contains(&active) {
+                item.dependents.push(active);
+            }
         }
     }
 

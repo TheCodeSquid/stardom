@@ -9,6 +9,12 @@ use crate::{
 };
 
 const KEYWORDS: &[&str] = &["as", "async", "for", "loop", "type"];
+const UNAVAILABLE_INTERFACES: &[&str] = &[
+    "ToggleEvent",
+    "NavigationCurrentEntryChangeEvent",
+    "FormDataEvent",
+    "NavigateEvent",
+];
 
 pub fn node_body(NodeBodyMacro { target, body }: NodeBodyMacro) -> TokenStream {
     let stmts = create_stmts(&target, body.stmts);
@@ -65,14 +71,14 @@ fn create_stmts(target: &syn::Expr, stmts: Vec<NodeStmt>) -> Vec<TokenStream> {
                     let active = ::std::cell::RefCell::new(::std::option::Option::None);
 
                     let rt = stardom_reactive::Runtime::unwrap_global();
-                    let scope = rt.active();
+                    let parent = rt.current();
 
                     let frag = ::std::clone::Clone::clone(&fragment);
                     stardom_reactive::effect(move || {
                         let mut arms = arms.borrow_mut();
                         let mut active = active.borrow_mut();
 
-                        let old = rt.with_parent(scope, || #expr);
+                        let old = rt.with_parent(parent, || #expr);
 
                         if old == *active {
                             return;
@@ -119,7 +125,7 @@ fn create_stmts(target: &syn::Expr, stmts: Vec<NodeStmt>) -> Vec<TokenStream> {
                 quote_spanned! {value.span() => {
                     let target = ::std::clone::Clone::clone(#target);
                     let name = {
-                    use stardom_nodes::attributes::*;
+                        use stardom_nodes::attributes::*;
                         ::std::string::ToString::to_string(&#name)
                     };
                     stardom_reactive::effect(move || {
@@ -128,10 +134,13 @@ fn create_stmts(target: &syn::Expr, stmts: Vec<NodeStmt>) -> Vec<TokenStream> {
                     });
                 }}
             }
-            NodeStmt::Event { name, f } => {
+            NodeStmt::Event { key, f } => {
                 quote_spanned! {f.span() => {
-                    let name = ::std::string::ToString::to_string(&#name);
-                    stardom_nodes::Node::event(#target, &name, #f);
+                    let key = {
+                        use stardom_nodes::events::*;
+                        #key
+                    };
+                    stardom_nodes::Node::event(#target, &key, #f);
                 }}
             }
         })
@@ -161,7 +170,7 @@ pub fn tagged_macros() -> TokenStream {
 }
 
 pub fn attributes() -> TokenStream {
-    let literals: Vec<_> = dom::attributes()
+    let constants: Vec<_> = dom::attributes()
         .iter()
         .filter(|attr| !KEYWORDS.contains(&attr.as_str()))
         .map(|attr| {
@@ -176,5 +185,37 @@ pub fn attributes() -> TokenStream {
         })
         .collect();
 
-    quote! { #(#literals)* }
+    quote! { #(#constants)* }
+}
+
+pub fn events() -> TokenStream {
+    let structs: Vec<_> = dom::events()
+        .iter()
+        .cloned()
+        .map(|mut event| {
+            if UNAVAILABLE_INTERFACES.contains(&event.interface.as_str()) {
+                event.interface = "Event".to_string()
+            }
+            event
+        })
+        .map(|event| {
+            let ident = syn::Ident::new(&event.name, Span::call_site());
+            let lit = syn::LitStr::new(&event.name, Span::call_site());
+            let interface = syn::Ident::new(&event.interface, Span::call_site());
+
+            quote! {
+                #[allow(non_camel_case_types)]
+                pub struct #ident;
+                impl stardom_nodes::EventKey for #ident {
+                    type Event = web_sys::#interface;
+
+                    fn name(&self) -> &str {
+                        #lit
+                    }
+                }
+            }
+        })
+        .collect();
+
+    quote! { #(#structs)* }
 }

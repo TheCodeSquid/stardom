@@ -2,19 +2,26 @@ use std::sync::OnceLock;
 
 use serde::Deserialize;
 
-const DATA_SOURCE: &str = include_str!("../dom.toml");
+const DATA_SOURCE: &str = include_str!("../dom.json");
 
 static DOM: OnceLock<Dom> = OnceLock::new();
 
 #[derive(Deserialize)]
 struct Dom {
-    pub elements: Vec<String>,
-    pub attributes: Vec<String>,
+    elements: Vec<String>,
+    attributes: Vec<String>,
+    events: Vec<Event>,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct Event {
+    pub name: String,
+    pub interface: String,
 }
 
 impl Dom {
     pub fn get() -> &'static Dom {
-        DOM.get_or_init(|| toml::from_str(DATA_SOURCE).unwrap())
+        DOM.get_or_init(|| serde_json::from_str(DATA_SOURCE).unwrap())
     }
 }
 
@@ -24,4 +31,8 @@ pub fn elements() -> &'static [String] {
 
 pub fn attributes() -> &'static [String] {
     &Dom::get().attributes
+}
+
+pub fn events() -> &'static [Event] {
+    &Dom::get().events
 }

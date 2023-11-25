@@ -1,9 +1,13 @@
 use stardom_macros::create_element_macros;
 
 pub mod attributes {
-    use stardom_macros::create_attributes;
+    stardom_macros::create_attributes!();
+}
 
-    create_attributes!();
+pub mod events {
+    use crate as stardom_nodes;
+
+    stardom_macros::create_events!();
 }
 
 #[macro_export]

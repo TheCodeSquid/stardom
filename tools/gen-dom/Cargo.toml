@@ -9,6 +9,6 @@ ureq = "2"
 scraper = "0.18"
 
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"
+serde_json = "1"
 
 anyhow = "1"

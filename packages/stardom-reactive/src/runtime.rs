@@ -20,6 +20,9 @@ pub struct Runtime {
     pub(crate) scopes: RefCell<SparseSecondaryMap<ItemKey, Vec<ItemKey>>>,
 
     pub(crate) not_tracking: Cell<bool>,
+    /// Item to use instead of active as parent.
+    /// The first Option determines whether or not the parent will be overridden.
+    pub(crate) parent: Cell<Option<Option<ItemKey>>>,
     pub(crate) active: RefCell<Vec<ItemKey>>,
 }
 
@@ -56,11 +59,22 @@ impl Runtime {
         value
     }
 
+    pub fn with_parent<T, F: FnOnce() -> T>(&self, parent: Option<ItemKey>, f: F) -> T {
+        let prev = self.parent.replace(Some(parent));
+        let value = f();
+        self.parent.set(prev);
+        value
+    }
+
     pub fn active(&self) -> Option<ItemKey> {
         self.active.borrow().last().copied()
     }
 
-    pub(crate) fn add(&self, item: Item) -> ItemKey {
+    pub fn current(&self) -> Option<ItemKey> {
+        self.parent.get().or_else(|| Some(self.active())).flatten()
+    }
+
+    pub(crate) fn add(&'static self, item: Item) -> ItemKey {
         let parent = item.parent;
         let key = self.items.borrow_mut().insert(item);
         if let Some(parent) = parent {
@@ -93,24 +107,14 @@ pub fn untrack<T, F: FnOnce() -> T>(f: F) -> T {
     Runtime::unwrap_global().untrack(f)
 }
 
-pub fn signal_in<T: 'static>(parent: Option<ItemKey>, value: T) -> Signal<T> {
-    Signal::new(Runtime::unwrap_global(), parent, value)
-}
-
 pub fn signal<T: 'static>(value: T) -> Signal<T> {
     let rt = Runtime::unwrap_global();
-    Signal::new(rt, rt.active(), value)
-}
-
-pub fn effect_in<F: FnMut() + 'static>(parent: Option<ItemKey>, f: F) -> Effect {
-    let effect = Effect::new(Runtime::unwrap_global(), parent, f);
-    effect.run();
-    effect
+    Signal::new(rt, rt.current(), value)
 }
 
 pub fn effect<F: FnMut() + 'static>(f: F) -> Effect {
     let rt = Runtime::unwrap_global();
-    let effect = Effect::new(rt, rt.active(), f);
+    let effect = Effect::new(rt, rt.current(), f);
     effect.run();
     effect
 }

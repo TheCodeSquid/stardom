@@ -2,7 +2,7 @@ mod macros;
 
 use wasm_bindgen::{convert::FromWasmAbi, JsCast};
 
-pub use macros::attributes;
+pub use macros::{attributes, events};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum NodeType {

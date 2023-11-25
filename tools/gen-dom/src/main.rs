@@ -1,3 +1,5 @@
+// TODO: media element events and drag-and-drop events (see WHATWG_INDEX's Events section)
+
 use std::{env, fs, path::PathBuf};
 
 use anyhow::Result;
@@ -10,6 +12,13 @@ const WHATWG_INDEX: &str = "https://html.spec.whatwg.org/multipage/indices.html"
 struct Data {
     elements: Vec<String>,
     attributes: Vec<String>,
+    events: Vec<Event>,
+}
+
+#[derive(Serialize)]
+struct Event {
+    name: String,
+    interface: String,
 }
 
 fn main() -> Result<()> {
@@ -32,7 +41,6 @@ fn main() -> Result<()> {
     }
 
     // Attributes
-
     let select = "table:nth-of-type(3) tbody th code".try_into().unwrap();
     for attr in html.select(&select) {
         let name = text(&attr);
@@ -42,7 +50,18 @@ fn main() -> Result<()> {
         }
     }
 
-    let output = toml::to_string_pretty(&data)?;
+    // Events
+    let row_select = "table:nth-of-type(6) tbody tr".try_into().unwrap();
+    let name_select = "td:nth-child(1) code".try_into().unwrap();
+    let interface_select = "td:nth-child(2) code".try_into().unwrap();
+    for row in html.select(&row_select) {
+        let name = text(&row.select(&name_select).next().unwrap());
+        let interface = text(&row.select(&interface_select).next().unwrap());
+
+        data.events.push(Event { name, interface });
+    }
+
+    let output = serde_json::to_string_pretty(&data)?;
     fs::write(path, output)?;
     Ok(())
 }
