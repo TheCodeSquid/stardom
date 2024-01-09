@@ -1,6 +1,9 @@
-use std::{cell::RefCell, thread_local};
+use std::{cell::RefCell, rc::Rc, thread_local};
 
-use crate::node::{Node, NodeKind};
+use crate::{
+    node::{Node, NodeKind},
+    reactive::Item,
+};
 
 thread_local! {
     static STACK: RefCell<Vec<Component>> = RefCell::default();
@@ -12,6 +15,8 @@ type UnitFn = Box<dyn Fn()>;
 pub(crate) struct Component {
     pub on_mount: Option<UnitFn>,
     pub on_unmount: Option<UnitFn>,
+
+    pub _items: Vec<Rc<Item>>,
 }
 
 pub(crate) fn create_component<F>(f: F) -> Node
@@ -24,6 +29,13 @@ where
     let node = Node::new(NodeKind::Component(component));
     node.insert(&content, None);
     node
+}
+
+pub(crate) fn active<U, F>(f: F) -> Option<U>
+where
+    F: FnOnce(&mut Component) -> U,
+{
+    STACK.with_borrow_mut(|stack| stack.last_mut().map(f))
 }
 
 pub fn on_mount<F: Fn() + 'static>(f: F) {
