@@ -1,13 +1,6 @@
 [workspace]
 resolver = "2"
 members = [
-  "packages/*",
-  "tools/*"
+  "stardom",
+  "stardom-macros"
 ]
-
-[workspace.package]
-authors = ["Diego Sesmas Estrada <diegos7167@gmail.com>"]
-description = "A simplistic reactive web UI library"
-readme = "README.md"
-repository = "https://github.com/TheCodeSquid/stardom"
-license = "MIT"
