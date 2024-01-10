@@ -14,23 +14,23 @@ use crate::{
 type EventClosure = Closure<dyn Fn(web_sys::Event)>;
 
 #[derive(Clone)]
-pub struct Node(Rc<Inner>);
+pub struct Node(pub(crate) Rc<Inner>);
 
 #[derive(Clone)]
 pub struct WeakNode(Weak<Inner>);
 
-struct Inner {
-    native: Option<web_sys::Node>,
-    state: RefCell<State>,
+pub(crate) struct Inner {
+    pub(crate) native: Option<web_sys::Node>,
+    pub(crate) state: RefCell<State>,
 }
 
-struct State {
-    kind: NodeKind,
-    main_tree: bool,
-    parent: Option<WeakNode>,
-    next: Option<Node>,
-    children: Vec<Node>,
-    events: Vec<EventClosure>,
+pub(crate) struct State {
+    pub(crate) kind: NodeKind,
+    pub(crate) main_tree: bool,
+    pub(crate) parent: Option<WeakNode>,
+    pub(crate) next: Option<Node>,
+    pub(crate) children: Vec<Node>,
+    pub(crate) events: Vec<EventClosure>,
 }
 
 pub(crate) enum NodeKind {
@@ -42,9 +42,9 @@ pub(crate) enum NodeKind {
 }
 
 pub(crate) struct Element {
-    namespace: Option<String>,
-    name: String,
-    attrs: IndexMap<String, String>,
+    pub(crate) namespace: Option<String>,
+    pub(crate) name: String,
+    pub(crate) attrs: IndexMap<String, String>,
 }
 
 impl Node {

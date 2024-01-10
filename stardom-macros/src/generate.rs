@@ -75,8 +75,6 @@ pub fn create_named_structures() -> TokenStream {
     });
 
     quote! {
-        #(#elements)*
-
         pub mod attrs {
             #(#attrs)*
         }
@@ -84,6 +82,8 @@ pub fn create_named_structures() -> TokenStream {
         pub mod events {
             #(#events)*
         }
+
+        #(#elements)*
     }
 }
 
@@ -111,7 +111,7 @@ fn statement(stmt: NodeStmt, target: &syn::Ident) -> TokenStream {
         NodeStmt::Attr(key, value) => {
             quote! {
                 let key: ::std::string::String = {
-                    use stardom::constants::attrs::*;
+                    use stardom::util::attrs::*;
                     ::std::convert::Into::into(#key)
                 };
                 let value: ::std::string::String = ::std::convert::Into::into(#value);
@@ -121,7 +121,7 @@ fn statement(stmt: NodeStmt, target: &syn::Ident) -> TokenStream {
         NodeStmt::Event(key, f) => {
             quote! {
                 let key = {
-                    use stardom::constants::events::*;
+                    use stardom::util::events::*;
                     #key
                 };
                 let name = stardom::EventKey::name(&key).to_string();

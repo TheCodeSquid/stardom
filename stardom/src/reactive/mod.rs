@@ -27,11 +27,13 @@ pub(crate) struct Runtime {
 }
 
 impl Runtime {
-    pub fn init() {
-        let leaked = Box::leak(Box::default());
-        if GLOBAL.replace(Some(leaked)).is_some() {
-            panic!("reactive runtime already initialized");
+    pub fn init() -> bool {
+        if GLOBAL.get().is_some() {
+            return true;
         }
+        let leaked = Box::leak(Box::default());
+        GLOBAL.set(Some(leaked));
+        false
     }
 
     pub fn global() -> Option<&'static Self> {

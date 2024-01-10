@@ -1,11 +1,11 @@
 #![warn(clippy::use_self)]
 
-mod component;
+pub mod component;
 mod macros;
-mod node;
-mod reactive;
-
-pub mod constants;
+pub mod node;
+pub mod reactive;
+pub mod render;
+pub mod util;
 
 use std::thread_local;
 use wasm_bindgen::JsCast;
@@ -13,9 +13,10 @@ use wasm_bindgen::JsCast;
 use crate::reactive::Runtime;
 
 pub use crate::{
-    component::{on_mount, on_unmount},
-    node::{Node, WeakNode},
-    reactive::{effect, memo, signal, untrack, Input, Output, Signal},
+    component::*,
+    node::*,
+    reactive::{effect, memo, signal, untrack, Input, Output},
+    render::*,
 };
 pub use stardom_macros::{component, element};
 
@@ -35,7 +36,9 @@ pub fn mount<F>(f: F, selector: &str)
 where
     F: FnOnce() -> Node,
 {
-    Runtime::init();
+    if Runtime::init() {
+        panic!("reactive runtime already initialized");
+    }
     let target = document()
         .expect("can only mount in browser environments")
         .query_selector(selector)
