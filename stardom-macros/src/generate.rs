@@ -19,9 +19,7 @@ const MISSING: &[&str] = &[
 ];
 
 pub fn create_named_structures() -> TokenStream {
-    let data = web::Data::get();
-
-    let elements = data.elements.iter().map(|elem| {
+    let elements = web::ELEMENTS.iter().map(|elem| {
         let ident = syn::Ident::new(elem, Span::call_site());
         let lit = syn::LitStr::new(elem, Span::call_site());
 
@@ -35,7 +33,7 @@ pub fn create_named_structures() -> TokenStream {
         }
     });
 
-    let attrs = data.attrs.iter().filter_map(|attr| {
+    let attrs = web::ATTRS.iter().filter_map(|attr| {
         let snake = attr.to_case(Case::Snake);
         if KEYWORDS.contains(&snake.as_str()) {
             return None;
@@ -49,7 +47,7 @@ pub fn create_named_structures() -> TokenStream {
         })
     });
 
-    let events = data.events.iter().map(|(name, interface)| {
+    let events = web::EVENTS.iter().map(|(name, interface)| {
         let name_ident = syn::Ident::new(name, Span::call_site());
         let name_lit = syn::LitStr::new(name, Span::call_site());
 

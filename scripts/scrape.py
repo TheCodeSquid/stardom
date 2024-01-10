@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import json
 import requests
 from bs4 import BeautifulSoup
 
@@ -56,10 +55,22 @@ for row in event_table.tbody.find_all("tr"):
     name = row.td.code.text
     events.append((name, "DragEvent"))
 
-data = {
-    "elements": elements,
-    "attrs": attrs,
-    "events": events
-}
-with open("stardom-macros/web.json", "w") as file:
-    json.dump(data, file, indent=2)
+
+def write_rust_array(file, name, entries):
+    file.write("pub const {0}: &[&str] = &[\n".format(name))
+    for entry in entries:
+        file.write("    \"{0}\",\n".format(entry))
+    file.write("];\n\n")
+
+
+def write_rust_kv(file, name, entries):
+    file.write("pub const {0}: &[(&str, &str)] = &[\n".format(name))
+    for k, v in entries:
+        file.write("    (\"{0}\", \"{1}\"),\n".format(k, v))
+    file.write("];\n\n")
+
+
+with open("stardom-macros/src/web.rs", "w") as file:
+    write_rust_array(file, "ELEMENTS", elements)
+    write_rust_array(file, "ATTRS", attrs)
+    write_rust_kv(file, "EVENTS", events)
