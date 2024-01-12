@@ -1,7 +1,6 @@
 #![warn(clippy::use_self)]
 
 pub mod component;
-mod macros;
 pub mod node;
 pub mod reactive;
 pub mod render;
@@ -10,15 +9,17 @@ pub mod util;
 use std::thread_local;
 use wasm_bindgen::JsCast;
 
-use crate::reactive::Runtime;
+use crate::{node::Node, reactive::Runtime};
 
-pub use crate::{
-    component::*,
-    node::*,
-    reactive::{effect, memo, signal, untrack, Input, Output},
-    render::*,
-};
-pub use stardom_macros::{component, element};
+pub mod prelude {
+    pub use crate::{
+        component::{on_mount, on_unmount},
+        node::Node,
+        reactive::{effect, memo, signal, untrack, Input, Output},
+        util::elements::*,
+    };
+    pub use stardom_macros::{component, element};
+}
 
 thread_local! {
     static DOCUMENT: Option<web_sys::Document> = if cfg!(target_family = "wasm") {

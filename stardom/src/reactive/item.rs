@@ -1,53 +1,87 @@
-use std::{
-    any::Any,
-    cell::RefCell,
-    rc::{Rc, Weak},
-};
+use std::{any::Any, cell::RefMut, mem};
 
-use super::Runtime;
+use slotmap::new_key_type;
+
+use crate::{component, reactive::Runtime};
+
+new_key_type! {
+    pub struct ItemKey;
+}
 
 pub struct Item {
     pub rt: &'static Runtime,
-    pub value: Option<RefCell<Box<dyn Any>>>,
-    pub action: Option<Box<dyn Fn()>>,
-    pub dependents: RefCell<Vec<Weak<Item>>>,
+    pub key: ItemKey,
+    pub value: Option<Box<dyn Any>>,
+    pub action: Option<Box<dyn FnMut()>>,
+    pub dependents: Vec<ItemKey>,
+}
+
+impl ItemKey {
+    pub fn get(self, rt: &Runtime) -> Option<RefMut<Item>> {
+        let items = rt.items.borrow_mut();
+        RefMut::filter_map(items, |items| items.get_mut(self)).ok()
+    }
+
+    pub fn unwrap(self, rt: &Runtime) -> RefMut<Item> {
+        self.get(rt).expect("reactive item already dropped")
+    }
+
+    pub fn run(self, rt: &Runtime) {
+        let mut action = mem::take(&mut self.unwrap(rt).action).expect("item has no action");
+        rt.stack.borrow_mut().push(self);
+        let prev = rt.tracking.replace(true);
+        action();
+        rt.tracking.set(prev);
+        rt.stack.borrow_mut().pop();
+        self.unwrap(rt).action = Some(action);
+    }
+
+    pub fn trigger(self, rt: &Runtime) {
+        if !rt.tracking.get() {
+            return;
+        }
+
+        let keys = mem::take(&mut self.unwrap(rt).dependents);
+        for key in keys {
+            key.run(rt);
+        }
+    }
 }
 
 impl Item {
-    pub fn new() -> Self {
-        Self {
-            rt: Runtime::unwrap_global(),
-            value: None,
-            action: None,
-            dependents: RefCell::default(),
+    pub fn create<F>(f: F) -> (&'static Runtime, ItemKey)
+    where
+        F: FnOnce(&mut Self),
+    {
+        let rt = Runtime::unwrap();
+        let mut items = rt.items.borrow_mut();
+        let key = items.insert_with_key(|key| {
+            let mut item = Self {
+                rt,
+                key,
+                value: None,
+                action: None,
+                dependents: vec![],
+            };
+            f(&mut item);
+            item
+        });
+        component::with_active(|component| {
+            component.add(key);
+        });
+        (rt, key)
+    }
+
+    pub fn track(&mut self) {
+        if !self.rt.tracking.get() {
+            return;
         }
-    }
 
-    pub fn run(self: &Rc<Self>) {
-        let action = self.action.as_ref().expect("item has no action");
-
-        self.rt.stack.borrow_mut().push(self.clone());
-        action();
-        self.rt.stack.borrow_mut().pop();
-    }
-
-    pub fn track(&self) {
         let stack = self.rt.stack.borrow();
         if let Some(last) = stack.last() {
-            let mut deps = self.dependents.borrow_mut();
-            if !deps
-                .iter()
-                .any(|weak| Weak::ptr_eq(weak, &Rc::downgrade(last)))
-            {
-                deps.push(Rc::downgrade(last));
+            if !self.dependents.contains(last) {
+                self.dependents.push(*last);
             }
-        }
-    }
-
-    pub fn trigger(&self) {
-        let deps = std::mem::take(&mut *self.dependents.borrow_mut());
-        for item in deps.iter().filter_map(Weak::upgrade) {
-            item.run();
         }
     }
 }

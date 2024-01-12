@@ -5,8 +5,6 @@ use crate::{
     reactive::Runtime,
 };
 
-// Render
-
 const VOID: &[&str] = &[
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track",
     "wbr",
@@ -28,7 +26,10 @@ where
 {
     Runtime::init();
 
-    let node = f();
+    render_node(w, &f())
+}
+
+fn render_node<W: Write>(w: &mut W, node: &Node) -> fmt::Result {
     let state = node.0.state.borrow();
     match &state.kind {
         NodeKind::Text(content) => {
@@ -47,7 +48,7 @@ where
             } else {
                 write!(w, "<{}{}>", elem.name, attrs)?;
                 for child in &state.children {
-                    render(w, || child.clone())?;
+                    render_node(w, child)?;
                 }
                 write!(w, "</{}>", elem.name)?;
             }
@@ -55,10 +56,10 @@ where
         NodeKind::Raw(content) => {
             w.write_str(content)?;
         }
-        NodeKind::Opaque(_) => unreachable!(),
+        NodeKind::Fragment => {}
         NodeKind::Component(_) => {
             for child in &state.children {
-                render(w, || child.clone())?;
+                render_node(w, child)?;
             }
         }
     }

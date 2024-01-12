@@ -1,13 +1,13 @@
-use std::{
-    cell::{Ref, RefCell},
-    marker::PhantomData,
-    rc::{Rc, Weak},
+use std::marker::PhantomData;
+
+use super::{
+    item::{Item, ItemKey},
+    Input, Runtime,
 };
 
-use super::{item::Item, Input};
-
 pub struct Memo<T: 'static> {
-    item: Rc<Item>,
+    rt: &'static Runtime,
+    key: ItemKey,
     _phantom: PhantomData<*mut T>, // invariant
 }
 
@@ -16,55 +16,45 @@ impl<T: 'static> Memo<T> {
     where
         F: Fn() -> T + 'static,
     {
-        let item = Rc::new_cyclic(move |weak: &Weak<Item>| {
-            let weak = weak.clone();
+        let write = move |rt: &'static Runtime, key: ItemKey| {
+            key.unwrap(rt).value = Some(Box::new(f()));
+            key.trigger(rt);
+        };
 
-            let action = move || {
-                let value = f();
-                let item = weak.upgrade().unwrap();
-                *item.value.as_ref().unwrap().borrow_mut() = Box::new(value);
-                item.trigger();
-            };
-
-            Item {
-                value: Some(RefCell::new(Box::new(()))),
-                action: Some(Box::new(action)),
-                ..Item::new()
-            }
+        let (rt, key) = Item::create(|item| {
+            let Item { rt, key, .. } = *item;
+            item.action = Some(Box::new(move || {
+                write(rt, key);
+            }));
         });
-        item.run();
+        key.run(rt);
 
         Self {
-            item,
+            rt,
+            key,
             _phantom: PhantomData,
         }
-    }
-
-    fn value(&self) -> Ref<T> {
-        let value = self.item.value.as_ref().unwrap();
-        Ref::map(value.borrow(), |v| v.downcast_ref().unwrap())
     }
 }
 
 impl<T: 'static> Input<T> for Memo<T> {
     fn track(&self) {
-        self.item.track();
+        self.key.unwrap(self.rt).track();
     }
 
     fn with<U, F>(&self, f: F) -> U
     where
         F: FnOnce(&T) -> U,
     {
-        self.track();
-        f(&*self.value())
+        let mut item = self.key.unwrap(self.rt);
+        item.track();
+        f(item.value.as_ref().unwrap().downcast_ref().unwrap())
     }
 }
 
-impl<T: 'static> Clone for Memo<T> {
+impl<T> Copy for Memo<T> {}
+impl<T> Clone for Memo<T> {
     fn clone(&self) -> Self {
-        Self {
-            item: self.item.clone(),
-            _phantom: self._phantom,
-        }
+        *self
     }
 }

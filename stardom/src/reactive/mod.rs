@@ -1,18 +1,15 @@
-mod effect;
 mod item;
 mod memo;
 mod signal;
 
-use crate::component;
-use effect::Effect;
 use std::{
     cell::{Cell, RefCell},
-    rc::Rc,
     thread_local,
 };
 
-pub(crate) use item::Item;
+use slotmap::SlotMap;
 
+pub(crate) use item::{Item, ItemKey};
 pub use memo::Memo;
 pub use signal::Signal;
 
@@ -20,10 +17,21 @@ thread_local! {
     static GLOBAL: Cell<Option<&'static Runtime>> = const { Cell::new(None) };
 }
 
-#[derive(Default)]
 pub(crate) struct Runtime {
-    tracking: Cell<bool>,
-    stack: RefCell<Vec<Rc<Item>>>,
+    pub(crate) items: RefCell<SlotMap<ItemKey, Item>>,
+
+    pub(crate) tracking: Cell<bool>,
+    pub(crate) stack: RefCell<Vec<ItemKey>>,
+}
+
+impl Default for Runtime {
+    fn default() -> Self {
+        Self {
+            items: RefCell::default(),
+            tracking: Cell::new(true),
+            stack: RefCell::default(),
+        }
+    }
 }
 
 impl Runtime {
@@ -40,7 +48,7 @@ impl Runtime {
         GLOBAL.get()
     }
 
-    pub fn unwrap_global() -> &'static Self {
+    pub(crate) fn unwrap() -> &'static Self {
         Self::global().expect("no current reactive runtime")
     }
 }
@@ -49,7 +57,7 @@ pub fn untrack<T, F>(f: F) -> T
 where
     F: FnOnce() -> T,
 {
-    let rt = Runtime::unwrap_global();
+    let rt = Runtime::unwrap();
     let prev = rt.tracking.replace(true);
     let value = f();
     rt.tracking.set(prev);
@@ -58,10 +66,10 @@ where
 
 pub fn effect<F>(f: F)
 where
-    F: Fn() + 'static,
+    F: FnMut() + 'static,
 {
-    let effect = Effect::new(f);
-    component::active(|active| active._items.push(effect.item));
+    let (rt, key) = Item::create(|item| item.action = Some(Box::new(f)));
+    key.run(rt);
 }
 
 pub fn signal<T: 'static>(value: T) -> Signal<T> {
@@ -104,16 +112,5 @@ pub trait Output<T> {
 
     fn set(&self, value: T) {
         self.replace(value);
-    }
-}
-
-impl<T> Input<T> for &T {
-    fn track(&self) {}
-
-    fn with<U, F>(&self, f: F) -> U
-    where
-        F: FnOnce(&T) -> U,
-    {
-        f(self)
     }
 }

@@ -8,6 +8,7 @@ use wasm_bindgen::{intern, prelude::*};
 
 use crate::{
     component::{create_component, Component},
+    reactive::effect,
     EventKey,
 };
 
@@ -37,8 +38,8 @@ pub(crate) enum NodeKind {
     Text(String),
     Element(Element),
     Raw(String),
-    Opaque(web_sys::Node),
     Component(Component),
+    Fragment,
 }
 
 pub(crate) struct Element {
@@ -68,7 +69,7 @@ impl Node {
                 .unchecked_into(),
             ),
             NodeKind::Raw(_) => None,
-            NodeKind::Opaque(node) => Some(node.clone()),
+            NodeKind::Fragment => None,
             NodeKind::Component(_) => None,
         });
 
@@ -109,6 +110,10 @@ impl Node {
         create_component(f)
     }
 
+    pub fn fragment() -> Self {
+        Self::new(NodeKind::Fragment)
+    }
+
     pub fn native(&self) -> Option<web_sys::Node> {
         self.0.native.clone()
     }
@@ -144,7 +149,8 @@ impl Node {
 
                     for i in 0..children.length() {
                         let child = children.get(i).unwrap();
-                        let node = Self::new(NodeKind::Opaque(child));
+                        let mut node = Self::new(NodeKind::Fragment);
+                        Rc::get_mut(&mut node.0).unwrap().native = Some(child);
                         self.insert(&node, None);
                     }
                 }
@@ -219,6 +225,62 @@ impl Node {
         }
     }
 
+    pub fn replace(&self, old: &Self, new: &Self) {
+        let mut state = self.0.state.borrow_mut();
+        if !state.kind.is_container() {
+            panic!("not a container");
+        }
+
+        if old == new {
+            return;
+        }
+
+        // Virtual
+        let index = state
+            .children
+            .iter()
+            .position(|node| node == old)
+            .expect("replacement target not a child of parent");
+        state.children[index] = new.clone();
+        old.clear_main();
+        if state.main_tree {
+            new.mark_main();
+        } else {
+            new.clear_main();
+        }
+        if index > 0 {
+            if let Some(prev) = state.children.get(index - 1) {
+                prev.0.state.borrow_mut().next = Some(new.clone());
+            }
+        };
+        let next = state.children.get(index + 1).cloned();
+        {
+            let mut old = old.0.state.borrow_mut();
+            old.parent = None;
+            old.next = None;
+            let mut new = new.0.state.borrow_mut();
+            new.parent = Some(self.downgrade());
+            new.next = next.clone();
+        }
+
+        // Native
+        if crate::document().is_some() {
+            let parent = self.native().or_else(|| {
+                state
+                    .parent
+                    .as_ref()
+                    .and_then(WeakNode::upgrade)
+                    .as_ref()
+                    .and_then(Self::native)
+            });
+            if let Some(parent) = parent {
+                old.unmount(&parent);
+                let before = next.as_ref().and_then(Self::native_prepend_target);
+                new.mount(&parent, before.as_ref());
+            }
+        }
+    }
+
     pub fn remove(&self, child: &Self) {
         let mut state = self.0.state.borrow_mut();
         if !state.kind.is_container() {
@@ -289,13 +351,22 @@ impl Node {
 
     pub(crate) fn mark_main(&self) {
         let mut state = self.0.state.borrow_mut();
+        if state.main_tree {
+            return;
+        }
+
         state.main_tree = true;
         for child in &state.children {
             child.mark_main();
         }
 
-        if let NodeKind::Component(component) = &state.kind {
-            if let Some(on_mount) = &component.on_mount {
+        if let NodeKind::Component(component) = &mut state.kind {
+            if component.did_mount {
+                return;
+            }
+            component.did_mount = true;
+
+            if let Some(on_mount) = &mut component.on_mount {
                 on_mount();
             }
         }
@@ -303,57 +374,48 @@ impl Node {
 
     fn clear_main(&self) {
         let mut state = self.0.state.borrow_mut();
+        if !state.main_tree {
+            return;
+        }
+
         state.main_tree = false;
         for child in &state.children {
             child.clear_main();
-        }
-
-        if let NodeKind::Component(component) = &state.kind {
-            if let Some(on_unmount) = &component.on_unmount {
-                on_unmount();
-            }
         }
     }
 
     pub(crate) fn mount(&self, native: &web_sys::Node, before: Option<&web_sys::Node>) {
         let state = self.0.state.borrow();
-        if state.kind.is_virtual() {
+        if let Some(this) = self.native() {
+            native.insert_before(&this, before).unwrap();
+        } else {
             for child in &state.children {
                 child.mount(native, before);
             }
-        } else {
-            native.insert_before(self.unwrap_native(), before).unwrap();
         }
     }
 
     fn unmount(&self, native: &web_sys::Node) {
         let state = self.0.state.borrow();
-        if state.kind.is_virtual() {
+        if let Some(this) = self.native() {
+            native.remove_child(&this).unwrap();
+        } else {
             for child in &state.children {
                 child.unmount(native);
             }
-        } else {
-            native.remove_child(self.unwrap_native()).unwrap();
         }
-    }
-
-    fn unwrap_native(&self) -> &web_sys::Node {
-        self.0.native.as_ref().unwrap()
     }
 
     fn native_prepend_target(&self) -> Option<web_sys::Node> {
         let state = self.0.state.borrow();
-        let node = if state.kind.is_virtual() {
-            state.children.last().and_then(Self::native_prepend_target)
-        } else {
-            self.0.native.clone()
-        };
-        node.or_else(|| {
-            state
-                .next
-                .as_ref()
-                .and_then(|next| next.native_prepend_target())
-        })
+        self.native()
+            .or_else(|| state.children.last().and_then(Self::native_prepend_target))
+            .or_else(|| {
+                state
+                    .next
+                    .as_ref()
+                    .and_then(|next| next.native_prepend_target())
+            })
     }
 }
 
@@ -380,10 +442,6 @@ impl NodeKind {
         // should this account for void elements?
         !matches!(self, Self::Text(_))
     }
-
-    fn is_virtual(&self) -> bool {
-        matches!(self, Self::Raw(_) | Self::Component(_))
-    }
 }
 
 impl Eq for Node {}
@@ -397,5 +455,75 @@ impl Eq for WeakNode {}
 impl PartialEq for WeakNode {
     fn eq(&self, other: &Self) -> bool {
         Weak::ptr_eq(&self.0, &other.0)
+    }
+}
+
+pub trait CaptureNode: Sized {
+    fn capture_node<F>(parent: &Node, f: F)
+    where
+        F: Fn() -> Self + 'static;
+}
+
+impl CaptureNode for Node {
+    fn capture_node<F>(parent: &Node, f: F)
+    where
+        F: Fn() -> Self + 'static,
+    {
+        let mut current = Self::fragment();
+        parent.insert(&current, None);
+        effect({
+            let parent = parent.clone();
+            move || {
+                let node = f();
+                parent.replace(&current, &node);
+                current = node;
+            }
+        });
+    }
+}
+
+impl CaptureNode for Option<Node> {
+    fn capture_node<F>(parent: &Node, f: F)
+    where
+        F: Fn() -> Self + 'static,
+    {
+        let mut current = Node::fragment();
+        parent.insert(&current, None);
+        effect({
+            let parent = parent.clone();
+            move || {
+                let node = f().unwrap_or_else(Node::fragment);
+                parent.replace(&current, &node);
+                current = node;
+            }
+        });
+    }
+}
+
+impl CaptureNode for &str {
+    fn capture_node<F>(parent: &Node, f: F)
+    where
+        F: Fn() -> Self + 'static,
+    {
+        let node = Node::text("");
+        parent.insert(&node, None);
+        effect({
+            let node = node.clone();
+            move || node.set_text(f())
+        });
+    }
+}
+
+impl CaptureNode for String {
+    fn capture_node<F>(parent: &Node, f: F)
+    where
+        F: Fn() -> Self + 'static,
+    {
+        let node = Node::text("");
+        parent.insert(&node, None);
+        effect({
+            let node = node.clone();
+            move || node.set_text(f())
+        });
     }
 }
