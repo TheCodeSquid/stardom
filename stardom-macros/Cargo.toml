@@ -10,5 +10,4 @@ proc-macro = true
 syn = { version = "2", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"
-phf = { version = "0.11", features = ["macros"] }
 convert_case = "0.6"

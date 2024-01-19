@@ -1,5 +1,4 @@
 use convert_case::{Case, Casing};
-use phf::phf_map;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::spanned::Spanned;
@@ -8,20 +7,8 @@ use crate::parse::*;
 
 const RESERVED: &[&str] = &["as", "async", "for", "loop", "type"];
 
-const MISSING: &[&str] = &[
-    "ToggleEvent",
-    "NavigationCurrentEntryChangeEvent",
-    "FormDataEvent",
-    "NavigateEvent",
-    "PageRevealEvent",
-];
-
-const REPLACE: phf::Map<&str, &str> = phf_map! {
-    // Some browsers (Firefox & Safari) follow the old standard
-    "click" => "MouseEvent",
-};
-
-const UNSTABLE: &[&str] = &["clipboardchange", "copy", "cut", "paste"];
+const MISSING: &[&str] = &["FormDataEvent"];
+const UNSTABLE: &[&str] = &["ClipboardEvent"];
 
 pub fn create_named() -> TokenStream {
     let elements: Vec<_> = crate::ELEMENTS
@@ -50,18 +37,19 @@ pub fn create_named() -> TokenStream {
     let events: Vec<_> = crate::EVENTS
         .iter()
         .map(|(event, interface)| {
+            let is_unstable = UNSTABLE.contains(interface);
+
             let lit = syn::LitStr::new(event, Span::call_site());
             let ident = syn::Ident::new(event, Span::call_site());
             let interface = syn::Ident::new(
                 &if MISSING.contains(interface) {
                     "Event"
                 } else {
-                    REPLACE.get(event).unwrap_or(interface)
+                    interface
                 }.to_case(Case::UpperCamel),
                 Span::call_site(),
             );
 
-            let is_unstable = UNSTABLE.contains(event);
             let unstable = is_unstable.then(|| {
                 quote! {
                     #[cfg(web_sys_unstable_apis)]
