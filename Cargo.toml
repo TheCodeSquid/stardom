@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = [ "examples/todo",
+  "codegen",
+  "stardom-macros",
+  "stardom"
+]
+exclude = [
+  "examples/**/*"
+]

@@ -1,0 +1,50 @@
+[package]
+name = "stardom"
+version = "0.1.1"
+edition = "2021"
+
+# [package.metadata.docs.rs]
+# rustdoc-args = ["--cfg=web_sys_unstable_apis"]
+
+[dependencies]
+stardom-macros = { version = "0.1.1", path = "../stardom-macros" }
+indexmap = "2"
+wasm-bindgen = { version = "0.2", features = ["enable-interning"] }
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+  "Window",
+  "Document",
+  "Node",
+  "Element",
+  "NamedNodeMap",
+  "Attr",
+  "Text",
+  "Range",
+  "DocumentFragment",
+  "NodeList",
+  "Event",
+  "AddEventListenerOptions",
+
+  # types for generated events
+  "AnimationEvent",
+  "CompositionEvent",
+  "DragEvent",
+  "FocusEvent",
+  "InputEvent",
+  "KeyboardEvent",
+  "MouseEvent",
+  "PointerEvent",
+  "SubmitEvent",
+  "TouchEvent",
+  "TransitionEvent",
+  "WebGlContextEvent",
+  "WheelEvent",
+  # unstable apis
+  "ClipboardEvent"
+]
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+web-sys = { version = "0.3", features = ["Comment"] }
