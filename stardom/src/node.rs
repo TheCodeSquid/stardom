@@ -368,7 +368,7 @@ impl Node {
     }
 
     pub(crate) fn mark_main(&self) {
-        if self.is_main() {
+        if !is_web() || self.is_main() {
             return;
         }
 
@@ -376,16 +376,32 @@ impl Node {
         for child in &*self.0.children.borrow() {
             child.mark_main();
         }
+
+        if let NodeKind::Component(Component {
+            on_mount: Some(on_mount),
+            ..
+        }) = &self.0.kind
+        {
+            on_mount();
+        }
     }
 
     pub(crate) fn clear_main(&self) {
-        if !self.is_main() {
+        if !is_web() || !self.is_main() {
             return;
         }
 
         self.0.main_tree.set(false);
         for child in &*self.0.children.borrow() {
             child.clear_main();
+        }
+
+        if let NodeKind::Component(Component {
+            on_unmount: Some(on_unmount),
+            ..
+        }) = &self.0.kind
+        {
+            on_unmount();
         }
     }
 
