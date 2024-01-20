@@ -8,10 +8,13 @@ pub mod lists;
 // Message structs for preventing invalid attribute and event statements at compile-time.
 
 #[doc(hidden)]
-pub struct ThisNodeToBeAnElement;
+#[allow(non_camel_case_types)]
+pub struct this_node_to_be_an_element;
 
 #[doc(hidden)]
-pub struct AFragmentNode;
+#[allow(non_camel_case_types)]
+pub struct a_fragment_node;
 
 #[doc(hidden)]
-pub struct AComponent;
+#[allow(non_camel_case_types)]
+pub struct a_component;

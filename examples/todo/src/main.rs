@@ -41,6 +41,9 @@ fn app() -> Node {
         hr!();
 
         thing() {
+            // uncomment for an error
+            // class => "thing";
+
             {hi.cloned()}
         }
     }

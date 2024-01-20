@@ -23,7 +23,7 @@ impl ToTokens for Fragment {
         let stmts = stmts_to_tokens(&target, &self.stmts);
 
         tokens.extend(quote! {{
-            const __CURRENT_NODE: stardom::util::AFragmentNode = stardom::util::AFragmentNode;
+            const __CURRENT_NODE: stardom::util::a_fragment_node = stardom::util::a_fragment_node;
             let #target = stardom::node::Node::fragment();
             #stmts
             #target

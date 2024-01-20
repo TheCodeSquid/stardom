@@ -99,7 +99,7 @@ impl Stmt {
 
                 let span = call.span().resolved_at(call.span());
                 quote_spanned! {span=> {
-                    const __CURRENT_NODE: stardom::util::AComponent = stardom::util::AComponent;
+                    const __CURRENT_NODE: stardom::util::a_component = stardom::util::a_component;
                     let #child_target = stardom::node::Node::fragment();
                     #child_stmts
                     #target.insert(&#call, None);
@@ -108,7 +108,7 @@ impl Stmt {
             Self::Attr(StmtAttr { key, value }) => {
                 let guard_span = join(key.span(), value.span());
                 let guard = quote_spanned! {guard_span=>
-                    let _: stardom::util::ThisNodeToBeAnElement = __CURRENT_NODE;
+                    let _: stardom::util::this_node_to_be_an_element = __CURRENT_NODE;
                 };
 
                 let value_span = value.span().resolved_at(value.span());
@@ -143,7 +143,7 @@ impl Stmt {
             }) => {
                 let guard_span = join(at_token.span(), value.span());
                 let guard = quote_spanned! {guard_span=>
-                    let _: stardom::util::ThisNodeToBeAnElement = __CURRENT_NODE;
+                    let _: stardom::util::this_node_to_be_an_element = __CURRENT_NODE;
                 };
 
                 let key_span = key.span().resolved_at(key.span());

@@ -35,8 +35,8 @@ impl ToTokens for Element {
         let stmts = stmts_to_tokens(&target, &self.stmts);
 
         tokens.extend(quote! {{
-            const __CURRENT_NODE: stardom::util::ThisNodeToBeAnElement =
-                stardom::util::ThisNodeToBeAnElement;
+            const __CURRENT_NODE: stardom::util::this_node_to_be_an_element =
+                stardom::util::this_node_to_be_an_element;
             let #target = if let Some((__ns, __name)) = #name.split_once(';') {
                 stardom::node::Node::element_ns(__ns, __name)
             } else {
