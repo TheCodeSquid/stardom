@@ -1,6 +1,8 @@
 #![warn(clippy::use_self)]
 
+pub mod attr;
 pub mod component;
+pub mod event;
 pub mod node;
 pub mod reactive;
 pub mod util;
@@ -12,14 +14,11 @@ pub use web::{document, is_web};
 pub mod prelude {
     pub use crate::{
         component::{on_mount, on_unmount},
-        node::{component, element, Node},
+        node::{component, element, fragment, Node},
         reactive::{effect, memo, signal, Input as _, Output as _, Track as _, Trigger as _},
-        util::element::*,
+        util::{elements::*, lists::keyed},
     };
 }
-
-#[cfg(all(test, target_family = "wasm"))]
-wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 use node::Node;
 use reactive::{Runtime, RUNTIME};
@@ -45,3 +44,6 @@ where
 
     std::mem::forget(root);
 }
+
+#[cfg(all(test, target_family = "wasm"))]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);

@@ -1,3 +1,5 @@
+// TODO: try_* variants of the node operations for error handling
+
 use std::{
     cell::{Cell, RefCell},
     rc::{Rc, Weak},
@@ -8,40 +10,16 @@ use wasm_bindgen::{intern, prelude::*};
 
 use crate::{
     component::{create_component, Component},
-    util::event::EventKey,
+    event::{EventKey, EventOptions},
     web::{document, is_web},
 };
 
-pub use stardom_macros::{component, element};
+pub use stardom_macros::{component, element, fragment};
 
 type EventClosure = Closure<dyn Fn(web_sys::Event)>;
 
 #[derive(Clone)]
 pub struct Node(Rc<RawNode>);
-
-struct RawNode {
-    kind: NodeKind,
-
-    parent: RefCell<Option<Weak<RawNode>>>,
-    next: RefCell<Option<Node>>,
-    children: RefCell<Vec<Node>>,
-
-    main_tree: Cell<bool>,
-    native: Option<web_sys::Node>,
-    events: RefCell<Vec<EventClosure>>,
-}
-
-pub(crate) enum NodeKind {
-    Element {
-        namespace: Option<String>,
-        name: String,
-        attrs: RefCell<IndexMap<String, String>>,
-    },
-    Text(RefCell<String>),
-    Raw(RefCell<String>),
-    Component(Component),
-    Fragment,
-}
 
 impl Node {
     pub(crate) fn new(kind: NodeKind) -> Self {
@@ -311,24 +289,42 @@ impl Node {
         }
     }
 
-    pub fn event<K, F>(&self, key: K, passive: bool, f: F)
+    pub fn event<K, F>(&self, key: &K, opts: EventOptions, f: F)
     where
         K: EventKey,
         F: Fn(K::Event) + 'static,
     {
         if matches!(self.0.kind, NodeKind::Element { .. }) {
             if let Some(native) = &self.0.native {
-                let closure = EventClosure::new(move |ev: web_sys::Event| {
+                let ev_f = move |ev: web_sys::Event| {
                     f(ev.dyn_into().expect("event type mismatch"));
+                };
+
+                let closure = Rc::new_cyclic(|weak| {
+                    EventClosure::wrap(if opts.once.unwrap_or(false) {
+                        let node = self.clone();
+                        let weak = weak.clone();
+                        let f = move |ev| {
+                            ev_f(ev);
+
+                            let mut events = node.0.events.borrow_mut();
+                            let index = events
+                                .iter()
+                                .position(|event| Rc::as_ptr(event) == weak.as_ptr())
+                                .expect("once event removed early");
+                            events.swap_remove(index);
+                        };
+                        Box::new(f)
+                    } else {
+                        Box::new(ev_f)
+                    })
                 });
 
-                let mut opts = web_sys::AddEventListenerOptions::new();
-                opts.passive(passive);
                 native
                     .add_event_listener_with_callback_and_add_event_listener_options(
                         key.name(),
-                        closure.as_ref().unchecked_ref(),
-                        &opts,
+                        closure.as_ref().as_ref().unchecked_ref(),
+                        &opts.into(),
                     )
                     .unwrap();
 
@@ -483,6 +479,28 @@ impl From<String> for Node {
     }
 }
 
+impl From<Vec<Self>> for Node {
+    fn from(value: Vec<Self>) -> Self {
+        let frag = Self::fragment();
+        for node in &value {
+            frag.insert(node, None);
+        }
+        frag
+    }
+}
+
+struct RawNode {
+    kind: NodeKind,
+
+    parent: RefCell<Option<Weak<RawNode>>>,
+    next: RefCell<Option<Node>>,
+    children: RefCell<Vec<Node>>,
+
+    main_tree: Cell<bool>,
+    native: Option<web_sys::Node>,
+    events: RefCell<Vec<Rc<EventClosure>>>,
+}
+
 impl RawNode {
     fn new(kind: NodeKind, native: Option<web_sys::Node>) -> Self {
         Self {
@@ -495,6 +513,18 @@ impl RawNode {
             events: RefCell::default(),
         }
     }
+}
+
+pub(crate) enum NodeKind {
+    Element {
+        namespace: Option<String>,
+        name: String,
+        attrs: RefCell<IndexMap<String, String>>,
+    },
+    Text(RefCell<String>),
+    Raw(RefCell<String>),
+    Component(Component),
+    Fragment,
 }
 
 fn insert_raw_children(target: &Node, raw: &str) {

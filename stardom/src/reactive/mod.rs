@@ -28,6 +28,13 @@ pub trait Input<T: 'static> {
     where
         F: FnOnce(&T) -> U;
 
+    fn cloned(&self) -> T
+    where
+        T: Clone,
+    {
+        self.with(Clone::clone)
+    }
+
     fn get(&self) -> T
     where
         T: Copy,

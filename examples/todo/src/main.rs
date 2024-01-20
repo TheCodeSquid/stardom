@@ -8,32 +8,48 @@ fn main() {
 
 #[component]
 fn app() -> Node {
-    let count = signal(0i32);
-    let increment = move |_| {
-        count.update(|n| *n += 1);
-    };
-    let decrement = move |_| {
-        count.update(|n| *n -= 1);
-    };
+    let count = signal(0i64);
+    let increment = move |_ev| count.update(|n| *n += 1);
+    let decrement = move |_ev| count.update(|n| *n -= 1);
 
-    let state = memo(move || if count.get() % 2 == 0 { "Even" } else { "Odd" });
+    let hi = memo(move || {
+        let n = count.get();
+        if n >= 0 {
+            (0..n)
+                .map(|i| div!("Hi :3 — #", i.to_string()))
+                .collect::<Vec<_>>()
+        } else {
+            (0..-n).map(|i| div!("Bye :3 — #", i.to_string())).collect()
+        }
+    });
 
     div! {
-        h1!("Hello, world!");
+        class => "app";
 
-        p! {
-            {count.get().to_string()};
-            " is ";
-            {state.get()};
-        };
+        h1!("Hello, ", em!("stardom"), "!");
+        p!("Count: ", {count.get().to_string()});
 
         button! {
             @click => increment;
-            "Increment";
-        };
+            "Increment"
+        }
         button! {
             @click => decrement;
-            "Decrement";
+            "Decrement"
         }
+
+        hr!();
+
+        thing() {
+            {hi.cloned()}
+        }
+    }
+}
+
+fn thing(children: Node) -> Node {
+    div! {
+        em!(style => "display: block", "children start");
+        children;
+        em!(style => "display: block", "children end");
     }
 }
