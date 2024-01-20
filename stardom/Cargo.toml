@@ -2,10 +2,15 @@
 name = "stardom"
 version = "0.1.1"
 edition = "2021"
-
-[package.metadata.docs.rs]
-rustc-args = ["--cfg=web_sys_unstable_apis"]
-rustdoc-args = ["--cfg=web_sys_unstable_apis"]
+license = "MIT OR Apache-2.0"
+authors = ["Diego Sesmas"]
+description = "" # TODO
+readme = "../README.md" # TODO
+documentation = "https://docs.rs/stardom"
+homepage = "https://github.com/TheCodeSquid/stardom" # TODO?
+repository = "https://github.com/TheCodeSquid/stardom"
+keywords = ["web", "framework", "wasm"] # TODO
+categories = ["template-engine", "wasm", "web-programming"] # TODO?
 
 [dependencies]
 stardom-macros = { version = "0.1.1", path = "../stardom-macros" }
