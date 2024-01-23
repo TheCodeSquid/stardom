@@ -1,10 +1,9 @@
 [workspace]
 resolver = "2"
-members = [ "examples/todo",
-  "codegen",
-  "stardom-macros",
-  "stardom"
+members = [
+  
 ]
-exclude = [
-  "examples/**/*"
-]
+exclude = ["examples/**/*"]
+
+[workspace.package]
+license = "MIT OR Apache-2.0"
