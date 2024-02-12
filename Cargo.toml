@@ -1,9 +1,25 @@
 [workspace]
 resolver = "2"
 members = [
-  
+  "codegen",
+  "stardom-cli",
+
+  "stardom-reactive",
+  "stardom-macros",
+  "stardom-core",
+  "stardom",
+
+  "examples/todomvc/*",
 ]
-exclude = ["examples/**/*"]
+exclude = [
+  "examples/todomvc/dist",
+]
+default-members = [
+  "stardom-reactive",
+  "stardom-macros",
+  "stardom-core",
+  "stardom",
+]
 
 [workspace.package]
 license = "MIT OR Apache-2.0"

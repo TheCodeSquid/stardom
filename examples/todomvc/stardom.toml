@@ -1,0 +1,7 @@
+package = "todomvc-front"
+
+[profile.release]
+opt-level = "z"
+
+[build]
+out-dir = "dist"

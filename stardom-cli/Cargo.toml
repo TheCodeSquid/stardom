@@ -1,0 +1,40 @@
+[package]
+name = "stardom-cli"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[[bin]]
+name = "stardom"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[features]
+default = ["cli"]
+cli = [
+  "dep:clap",
+  "tokio/full",
+]
+
+[dependencies]
+anyhow = "1"
+thiserror = "1"
+tokio = { version = "1", features = ["rt", "fs", "sync", "macros"] }
+tokio-stream = { version = "0.1", default-features = false }
+futures-util = "0.3"
+ureq = { version = "2", features = ["native-certs"] }
+flate2 = "1"
+tar = "0.4"
+dirs = "5"
+which = "6"
+camino = { version = "1", features = ["serde1"] }
+cargo_metadata = "0.18"
+serde = { version = "1", features = ["derive"] }
+serde_ignored = "0.1"
+toml = "0.8"
+anstyle = "1"
+anstream = "0.6"
+humansize = "2"
+notify-debouncer-full = "0.3"
+
+clap = { version = "4", optional = true, features = ["derive"] }

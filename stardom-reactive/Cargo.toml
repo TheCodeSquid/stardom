@@ -1,0 +1,8 @@
+[package]
+name = "stardom-reactive"
+version = "0.1.1"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+indexmap = "2"

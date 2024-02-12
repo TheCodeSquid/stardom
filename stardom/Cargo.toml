@@ -1,0 +1,13 @@
+[package]
+name = "stardom"
+version = "0.1.1"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+stardom-core = { version = "0.1.1", path = "../stardom-core" }
+stardom-reactive = { version = "0.1.1", path = "../stardom-reactive" }
+stardom-macros = { version = "0.1.1", path = "../stardom-macros" }
+
+wasm-bindgen = "0.2"
+web-sys = "0.3"
