@@ -1,10 +1,11 @@
+use anyhow::Result;
 use tokio::process::Command;
 
-use crate::shell;
+use crate::{shell, util::ExitStatusExt};
 
 pub fn cargo(command: &str) -> Command {
     let mut cmd = Command::new("cargo");
-    cmd.args([
+    cmd.kill_on_drop(true).args([
         if shell().no_color() {
             "--color=never"
         } else {
@@ -60,7 +61,8 @@ impl Builder {
         self
     }
 
-    pub fn command(self) -> Command {
-        self.cmd
+    pub async fn build(mut self) -> Result<()> {
+        self.cmd.status().await?.exit_ok()?;
+        Ok(())
     }
 }

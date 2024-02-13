@@ -1,55 +1,94 @@
-use std::{path::Path, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use anyhow::Result;
 use notify_debouncer_full::{
     new_debouncer,
     notify::{RecommendedWatcher, RecursiveMode, Watcher as _},
-    DebounceEventResult, DebouncedEvent, Debouncer, FileIdMap,
+    DebounceEventResult, FileIdMap,
 };
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::broadcast;
 
-use crate::shell;
+type Debouncer = notify_debouncer_full::Debouncer<RecommendedWatcher, FileIdMap>;
 
+#[derive(Clone)]
 pub struct Watcher {
-    _debouncer: Debouncer<RecommendedWatcher, FileIdMap>,
-    recv: mpsc::UnboundedReceiver<Vec<DebouncedEvent>>,
-    abort: broadcast::Sender<()>,
+    reload: broadcast::Sender<()>,
+    building: Arc<AtomicBool>,
+    _debouncer: Arc<Option<Debouncer>>,
 }
 
 impl Watcher {
-    pub async fn recv(&mut self) -> Option<Vec<DebouncedEvent>> {
-        self.recv.recv().await
+    pub fn off() -> Self {
+        Self {
+            reload: broadcast::channel(1).0,
+            building: Arc::default(),
+            _debouncer: Arc::default(),
+        }
     }
 
-    pub fn abort_sender(&self) -> broadcast::Sender<()> {
-        self.abort.clone()
+    pub fn watch<P, F>(path: P, mut track: F) -> Result<Self>
+    where
+        P: AsRef<Path>,
+        F: FnMut(PathBuf) -> bool + Send + 'static,
+    {
+        let reload = broadcast::channel(1).0;
+
+        let reload_tx = reload.clone();
+        let mut debouncer = new_debouncer(
+            Duration::from_millis(200),
+            None,
+            move |result: DebounceEventResult| match result {
+                Ok(events) => {
+                    for path in events.into_iter().flat_map(|event| event.event.paths) {
+                        if track(path) {
+                            let _ = reload_tx.send(());
+                            break;
+                        }
+                    }
+                }
+                Err(_) => todo!(),
+            },
+        )?;
+
+        debouncer
+            .watcher()
+            .watch(path.as_ref(), RecursiveMode::Recursive)?;
+
+        Ok(Self {
+            reload,
+            building: Arc::default(),
+            _debouncer: Arc::new(Some(debouncer)),
+        })
+    }
+
+    pub fn build_lock(&self) -> BuildGuard {
+        self.building.store(true, Ordering::Release);
+        BuildGuard(self.building.clone())
+    }
+
+    pub async fn recv(&self) -> Result<(), broadcast::error::RecvError> {
+        let mut reload = self.reload.subscribe();
+        loop {
+            reload.recv().await?;
+            if !self.building.load(Ordering::Acquire) {
+                break;
+            }
+        }
+        Ok(())
     }
 }
 
-pub async fn watcher<P: AsRef<Path>>(path: P) -> Result<Watcher> {
-    let (tx, rx) = mpsc::unbounded_channel();
+pub struct BuildGuard(Arc<AtomicBool>);
 
-    let mut debouncer = new_debouncer(
-        Duration::from_millis(250),
-        None,
-        move |result: DebounceEventResult| match result {
-            Ok(events) => {
-                let _ = tx.send(events);
-            }
-            Err(errors) => errors.into_iter().for_each(|error| {
-                shell().error(error);
-            }),
-        },
-    )?;
-
-    let path = path.as_ref();
-    debouncer.watcher().watch(path, RecursiveMode::Recursive)?;
-    shell().status("Watching", path.display());
-
-    let (abort, _) = broadcast::channel(1);
-    Ok(Watcher {
-        _debouncer: debouncer,
-        recv: rx,
-        abort,
-    })
+impl Drop for BuildGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
 }

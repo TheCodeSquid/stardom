@@ -19,9 +19,7 @@ cli = [
 [dependencies]
 anyhow = "1"
 thiserror = "1"
-tokio = { version = "1", features = ["rt", "fs", "sync", "macros"] }
-tokio-stream = { version = "0.1", default-features = false }
-futures-util = "0.3"
+tokio = { version = "1", features = ["rt", "fs", "process", "sync", "macros"] }
 ureq = { version = "2", features = ["native-certs"] }
 flate2 = "1"
 tar = "0.4"
@@ -34,7 +32,6 @@ serde_ignored = "0.1"
 toml = "0.8"
 anstyle = "1"
 anstream = "0.6"
-humansize = "2"
 notify-debouncer-full = "0.3"
 
 clap = { version = "4", optional = true, features = ["derive"] }

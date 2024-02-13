@@ -1,11 +1,13 @@
 use std::{
     fmt,
-    io::{self, Write},
+    io::Write,
     sync::{Mutex, OnceLock},
 };
 
 use anstream::ColorChoice;
 use anstyle::*;
+
+const CLEAR_LINE: &str = "\x1b[2K";
 
 const ERROR: Style = AnsiColor::Red.on_default().bold();
 const WARN: Style = AnsiColor::Yellow.on_default().bold();
@@ -37,6 +39,12 @@ impl Shell {
         self.no_color
     }
 
+    pub fn clear_line(&self) {
+        let (stderr, needs_clear) = &mut *self.stderr.lock().unwrap();
+        *needs_clear = false;
+        write!(stderr, "\r{}", CLEAR_LINE).expect("failed to write to stderr");
+    }
+
     pub fn print(
         &self,
         style: Style,
@@ -46,18 +54,19 @@ impl Shell {
         replaceable: bool,
     ) {
         let log = create_log(style, status, message, justified);
-        let mut stderr = self.stderr.lock().unwrap();
-        if stderr.1 {
-            stderr.1 = false;
-            let _ = clear_line(&mut stderr.0);
+        let mut buf = vec![];
+        let (stderr, needs_clear) = &mut *self.stderr.lock().unwrap();
+        if *needs_clear {
+            *needs_clear = false;
+            write!(&mut buf, "{}", CLEAR_LINE).unwrap();
         }
         if replaceable {
-            stderr.1 = true;
-            write!(stderr.0, "{log}\r")
+            *needs_clear = true;
+            write!(&mut buf, "{log}\r").unwrap();
         } else {
-            writeln!(stderr.0, "{log}")
-        }
-        .expect("failed to write to stderr");
+            writeln!(&mut buf, "{log}").unwrap();
+        };
+        stderr.write_all(&buf).expect("failed to write to stderr");
     }
 
     pub fn error(&self, message: impl fmt::Display) {
@@ -93,8 +102,4 @@ fn create_log(
         };
         format!("{style}{status}{style:#}{bold}:{bold:#} {message}")
     }
-}
-
-fn clear_line<W: Write>(w: &mut W) -> io::Result<()> {
-    w.write_all(b"\x1b[K")
 }

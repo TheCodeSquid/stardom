@@ -1,13 +1,12 @@
 mod watch;
 
-use std::{env, process::ExitStatus};
+use std::env;
 
 use anyhow::{anyhow, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use cargo_metadata::{Metadata, MetadataCommand, Package, Target};
-use humansize::FormatSizeOptions;
 use thiserror::Error;
-use tokio::{fs, process::Command, sync::broadcast, task};
+use tokio::{fs, task};
 
 use crate::{
     config::{Config, Profile},
@@ -15,6 +14,7 @@ use crate::{
     tools::{self, OptLevel},
     util::*,
 };
+use watch::Watcher;
 
 #[derive(Clone)]
 pub struct Project {
@@ -22,7 +22,7 @@ pub struct Project {
     pub meta: Metadata,
     pub config: Config,
     pub config_path: Option<Utf8PathBuf>,
-    abort: Option<broadcast::Sender<()>>,
+    watcher: Watcher,
 }
 
 impl Project {
@@ -40,6 +40,8 @@ impl Project {
     }
 
     pub async fn build(&self, profile: &str) -> Result<()> {
+        let _build = self.watcher.build_lock();
+
         let profile_config = self.profile_config(profile);
         let package = self.primary_package()?;
         let bin = self.primary_bin(package)?;
@@ -54,29 +56,28 @@ impl Project {
 
         // cargo build
 
-        let cmd = tools::cargo::build()
+        tools::cargo::build()
             .target("wasm32-unknown-unknown")
             .profile(profile)
             .package(&package.name)
             .bin(bin)
             .default_features(self.config.project.default_features)
             .features(&self.config.project.features)
-            .command();
-        self.maybe_abort(cmd).await?.exit_ok()?;
+            .build()
+            .await?;
 
         // wasm-bindgen
 
         let wasm_file = target_dir.join(bin).with_extension("wasm");
         let wasm_dir = target_dir.join("wasm-bindgen");
-        self.wasm_bindgen(&wasm_file, &wasm_dir).await?;
+        tools::wasm_bindgen(&wasm_file, &wasm_dir).await?;
 
         // wasm-opt
 
         let bg_file = wasm_dir.join(format!("{bin}_bg.wasm"));
         let temp_file = wasm_dir.join(format!("{bin}_temp.wasm"));
 
-        self.wasm_opt(profile_config.opt_level, &bg_file, &temp_file)
-            .await?;
+        tools::wasm_opt(profile_config.opt_level, &bg_file, &temp_file).await?;
         fs::rename(temp_file, bg_file).await?;
 
         // finalization
@@ -91,52 +92,25 @@ impl Project {
     }
 
     pub async fn watch(mut self, profile: &str) -> Result<()> {
-        // TODO: configurable watch targets
-        let mut watcher = watch::watcher(&self.root).await?;
-        let abort = watcher.abort_sender();
-        self.abort = Some(abort.clone());
+        let out_dir = self.out_dir();
+        let target_dir = self.meta.target_directory.clone();
+        self.watcher = Watcher::watch(".", move |path| {
+            !path.starts_with(&out_dir) && !path.starts_with(&target_dir)
+        })?;
 
         loop {
-            let proj = self.clone();
             let profile = profile.to_string();
+            let project = self.clone();
+
             task::spawn(async move {
-                if let Err(err) = proj.build(&profile).await {
+                if let Err(err) = project.build(&profile).await {
                     if !is_error_silent(&err) {
                         shell().error(err);
                     }
                 }
             });
 
-            let mut full_reload = false;
-            let out_dir = self.out_dir();
-            'recv: loop {
-                let events = watcher
-                    .recv()
-                    .await
-                    .ok_or_else(|| anyhow!("filesystem watcher closed"))?;
-                for path in events.into_iter().flat_map(|event| event.event.paths) {
-                    if path.starts_with(&self.meta.target_directory) || path.starts_with(&out_dir) {
-                        continue;
-                    }
-
-                    if self
-                        .config_path
-                        .as_ref()
-                        .is_some_and(|config_path| path == config_path.as_std_path())
-                    {
-                        full_reload = true;
-                    }
-                    break 'recv;
-                }
-            }
-
-            if full_reload {
-                shell().status("Reload", "stardom.toml changed, full restart");
-                self = Self::from_env(self.config_path.as_deref())?;
-            } else {
-                shell().status("Reload", "");
-            }
-            let _ = abort.send(());
+            self.watcher.recv().await?;
         }
     }
 
@@ -198,53 +172,6 @@ impl Project {
         self.root.join(&self.config.build.out_dir)
     }
 
-    async fn maybe_abort(&self, mut cmd: Command) -> Result<ExitStatus> {
-        let mut child = cmd.spawn()?;
-        if let Some(mut abort) = self.abort.as_ref().map(broadcast::Sender::subscribe) {
-            tokio::select! {
-                status = child.wait() => Ok(status?),
-                _ = abort.recv() => {
-                    child.kill().await?;
-                    Err(anyhow!(WatchAbortError))
-                }
-            }
-        } else {
-            let status = child.wait().await?;
-            Ok(status)
-        }
-    }
-
-    async fn wasm_bindgen(&self, input: &Utf8Path, out_dir: &Utf8Path) -> Result<()> {
-        self.maybe_abort(tools::wasm_bindgen(input, out_dir).await?)
-            .await?
-            .exit_ok()?;
-        Ok(())
-    }
-
-    async fn wasm_opt(&self, level: OptLevel, input: &Utf8Path, output: &Utf8Path) -> Result<()> {
-        shell().progress("Optimizing", format!("opt-level: {}", level));
-
-        self.maybe_abort(tools::wasm_opt(level, input, output).await?)
-            .await?
-            .exit_ok()?;
-
-        let old = input.metadata()?.len() as f64;
-        let new = output.metadata()?.len() as f64;
-        let percent = 100.0 * (new - old) / old;
-
-        shell().status(
-            "Optimized",
-            format!(
-                "{} -> {} ({}%, opt-level: {})",
-                file_size(old),
-                file_size(new),
-                percent.round(),
-                level
-            ),
-        );
-        Ok(())
-    }
-
     pub fn from_env(config: Option<&Utf8Path>) -> Result<Self> {
         if let Some(path) = config {
             let root = path.canonicalize_utf8()?.parent().unwrap().to_path_buf();
@@ -255,7 +182,7 @@ impl Project {
                 meta,
                 config,
                 config_path: Some(path.to_path_buf()),
-                abort: None,
+                watcher: Watcher::off(),
             })
         } else {
             let meta = MetadataCommand::new().no_deps().exec()?;
@@ -267,7 +194,7 @@ impl Project {
                     meta,
                     config,
                     config_path: Some(path),
-                    abort: None,
+                    watcher: Watcher::off(),
                 })
             } else {
                 let config = Config::default();
@@ -277,7 +204,7 @@ impl Project {
                     meta,
                     config,
                     config_path: None,
-                    abort: None,
+                    watcher: Watcher::off(),
                 })
             }
         }
@@ -310,15 +237,6 @@ fn bin_targets(package: &Package) -> Vec<&Target> {
         .iter()
         .filter(|target| target.kind.iter().any(|k| k == "bin"))
         .collect()
-}
-
-fn file_size(size: f64) -> String {
-    humansize::format_size_i(
-        size,
-        FormatSizeOptions::default()
-            .decimal_places(2)
-            .space_after_value(false),
-    )
 }
 
 #[derive(Clone, Copy, Error, Debug)]

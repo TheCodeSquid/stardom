@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use camino::Utf8Path;
-use tokio::process::Command;
+
+use crate::util::ExitStatusExt;
 
 use super::{Target, Tool, Tools};
 
@@ -21,13 +22,18 @@ const TOOLS: Tools = Tools {
 
 const WASM_BINDGEN: Tool = TOOLS.tool("wasm-bindgen");
 
-pub async fn wasm_bindgen(input: &Utf8Path, out_dir: &Utf8Path) -> Result<Command> {
-    WASM_BINDGEN.command().await.map(|mut cmd| {
-        cmd.args([
+pub async fn wasm_bindgen(input: &Utf8Path, out_dir: &Utf8Path) -> Result<()> {
+    WASM_BINDGEN
+        .command()
+        .await?
+        .kill_on_drop(true)
+        .args([
             input.as_str(),
             "--target=web",
             &format!("--out-dir={}", out_dir),
-        ]);
-        cmd
-    })
+        ])
+        .status()
+        .await?
+        .exit_ok()?;
+    Ok(())
 }

@@ -1,9 +1,10 @@
-use std::fmt;
+use std::{fmt, time::Instant};
 
 use anyhow::{bail, Result};
 use camino::Utf8Path;
 use serde::de::{self, Deserialize, Deserializer, Unexpected};
-use tokio::process::Command;
+
+use crate::{shell, util::*};
 
 use super::{Target, Tool, Tools};
 
@@ -25,16 +26,39 @@ const TOOLS: Tools = Tools {
 
 const WASM_OPT: Tool = TOOLS.tool("wasm-opt");
 
-pub async fn wasm_opt(level: OptLevel, input: &Utf8Path, output: &Utf8Path) -> Result<Command> {
-    WASM_OPT.command().await.map(|mut cmd| {
-        cmd.args([
+pub async fn wasm_opt(level: OptLevel, input: &Utf8Path, output: &Utf8Path) -> Result<()> {
+    shell().progress("Optimizing", format!("opt-level: {}", level));
+    let start = Instant::now();
+
+    WASM_OPT
+        .command()
+        .await?
+        .kill_on_drop(true)
+        .args([
             input.as_str(),
             &format!("-O{}", level),
             &format!("--output={}", output),
             "--quiet",
-        ]);
-        cmd
-    })
+        ])
+        .status()
+        .await?
+        .exit_ok()?;
+
+    let old = input.metadata()?.len();
+    let new = output.metadata()?.len();
+
+    shell().status(
+        "Optimized",
+        format!(
+            "{} -> {} in {} ({:.1}%, opt-level: {})",
+            FileSize(old),
+            FileSize(new),
+            Elapsed(start.elapsed()),
+            efficiency(old, new),
+            level
+        ),
+    );
+    Ok(())
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
